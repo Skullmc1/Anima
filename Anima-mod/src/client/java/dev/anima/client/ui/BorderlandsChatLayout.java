@@ -29,10 +29,14 @@ public final class BorderlandsChatLayout {
     public static Box compute(Minecraft mc, int guiWidth, int guiHeight) {
         double scale = mc.options.chatScale().get();
         int rawWidth = ChatComponent.getWidth(mc.options.chatWidth().get());
-        int scaledWidth = Math.max(120, (int) Math.ceil(rawWidth * scale));
-        // Keep a comfortable right margin and ensure left never collides with the hotbar
+        int scaledWidth = Math.max(110, (int) Math.ceil(rawWidth * scale));
         int right = guiWidth - 10;
-        int panelWidth = Math.min(scaledWidth + 14, Math.max(140, guiWidth / 2 - 110));
+        int hotbarRight = (guiWidth / 2) + 95;
+        int availRightW = right - hotbarRight - 6;
+        // Fit cleanly to the right of the hotbar; on very narrow windows use up to 44% width lifted above hotbar
+        int panelWidth = (availRightW >= 120)
+                ? Math.min(scaledWidth + 14, availRightW)
+                : Math.min(scaledWidth + 14, Math.max(120, (int) (guiWidth * 0.44f)));
         int left = right - panelWidth;
         int shiftX = left + 2;
 

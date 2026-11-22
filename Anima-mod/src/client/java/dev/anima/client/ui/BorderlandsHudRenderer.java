@@ -54,12 +54,28 @@ public final class BorderlandsHudRenderer {
             return;
         }
         Font font = mc.font;
+        int screenW = g.guiWidth();
         int screenH = g.guiHeight();
 
-        // Anchor in bottom-left with comfortable breathing room
+        // Responsive scaling based on available space to the left of the hotbar (and offhand slot)
+        boolean leftOffhand = !player.getOffhandItem().isEmpty() && player.getMainArm().getOpposite() == HumanoidArm.LEFT;
+        int hotbarLeft = (screenW / 2) - 91 - (leftOffhand ? 30 : 0);
+        int availW = hotbarLeft - 12;
+        float scale = Mth.clamp(availW / 194.0f, 0.58f, 1.0f);
+        // If window is extremely narrow, lift HUD cleanly above the hotbar so it stays crisp and readable
+        int liftAboveHotbar = (availW < 112) ? 26 : 0;
+
+        g.pose().pushMatrix();
+        // Anchor scaling at the bottom-left corner so HUD stays pinned cleanly to the bottom-left edge
+        float anchorX = 8.0f;
+        float anchorY = (float) (screenH - 8 - liftAboveHotbar);
+        g.pose().translate(anchorX, anchorY);
+        g.pose().scale(scale, scale);
+
+        // Local coordinates relative to bottom-left anchor (0, 0)
         int diamondRadius = 20;
-        int dCx = 14 + diamondRadius;
-        int dCy = screenH - 14 - diamondRadius;
+        int dCx = 4 + diamondRadius;
+        int dCy = -4 - diamondRadius;
 
         // Slanted metallic-dark backplate extending to the right of the diamond
         int panelX = dCx + 8;
@@ -140,6 +156,8 @@ public final class BorderlandsHudRenderer {
 
         // 4. Tilted Chamfered Diamond EXP Level Badge (drawn on top so it overlaps the left edge of the panel!)
         drawExpDiamondBadge(g, font, dCx, dCy, diamondRadius, player.experienceLevel, player.experienceProgress);
+
+        g.pose().popMatrix();
     }
 
     /**

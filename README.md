@@ -48,7 +48,7 @@ Switch modes anytime from the **Escape Menu** via Anima's custom dark glassmorph
 ## Installation
 
 1. Install **Minecraft 26.2** with **Fabric Loader `>= 0.19.0`** and **Fabric API**.
-2. Drop `anima-0.16.1.jar` from `Anima-mod/build/libs/` into your `.minecraft/mods/` folder.
+2. Drop `anima-0.16.2.jar` from `Anima-mod/build/libs/` into your `.minecraft/mods/` folder.
 3. *(Optional)* Works alongside **Sodium `0.9.x+mc26.2`**, **Lithium**, **ModMenu**, **ViaFabricPlus**, and **Iris** *(disable Iris shader packs while using Anima modes)*.
 
 ---
