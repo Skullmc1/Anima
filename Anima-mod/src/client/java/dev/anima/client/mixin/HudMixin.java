@@ -6,17 +6,18 @@ import net.minecraft.client.DeltaTracker;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
 import net.minecraft.client.gui.Hud;
+import net.minecraft.client.gui.contextualbar.ContextualBar;
 import net.minecraft.client.multiplayer.MultiPlayerGameMode;
 import net.minecraft.world.entity.player.Player;
 import net.minecraft.world.item.ItemStack;
 import org.spongepowered.asm.mixin.Final;
 import org.spongepowered.asm.mixin.Mixin;
 import org.spongepowered.asm.mixin.Shadow;
+import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.Redirect;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
-import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
  * Replaces vanilla health, armor, hunger, air, and XP bars with the custom Borderlands
@@ -28,12 +29,10 @@ public abstract class HudMixin {
     @Shadow @Final private Minecraft minecraft;
 
     @Shadow
-    private Player getCameraPlayer() {
-        return null;
-    }
+    protected abstract Player getCameraPlayer();
 
     @Shadow
-    private void extractSlot(GuiGraphicsExtractor g, int x, int y, DeltaTracker deltaTracker, Player player, ItemStack stack, int seed) {}
+    protected abstract void extractSlot(GuiGraphicsExtractor g, int x, int y, DeltaTracker deltaTracker, Player player, ItemStack stack, int seed);
 
     @Inject(method = "extractPlayerHealth", at = @At("HEAD"), cancellable = true)
     private void anima$hideVanillaStatusBars(GuiGraphicsExtractor g, CallbackInfo ci) {
@@ -55,19 +54,32 @@ public abstract class HudMixin {
         ci.cancel();
     }
 
-    @Inject(method = "nextContextualInfoState", at = @At("RETURN"), cancellable = true)
-    private void anima$hideVanillaXpBar(CallbackInfoReturnable<Object> cir) {
-        if (AnimaMod.config().isBorderlands() && cir.getReturnValue() != null) {
-            if ("EXPERIENCE".equals(cir.getReturnValue().toString())) {
-                // Swap EXPERIENCE for EMPTY while leaving JUMPABLE_VEHICLE / LOCATOR untouched
-                for (Object constant : cir.getReturnValue().getClass().getEnumConstants()) {
-                    if ("EMPTY".equals(constant.toString())) {
-                        cir.setReturnValue(constant);
-                        return;
-                    }
-                }
-            }
+    @Redirect(
+            method = "extractHotbarAndDecorations",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/client/gui/contextualbar/ContextualBar;extractBackground(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V"
+            )
+    )
+    private void anima$hideVanillaXpBarBg(ContextualBar bar, GuiGraphicsExtractor g, DeltaTracker deltaTracker) {
+        if (AnimaMod.config().isBorderlands() && anima$isExperienceBar(bar)) {
+            return;
         }
+        bar.extractBackground(g, deltaTracker);
+    }
+
+    @Redirect(
+            method = "extractHotbarAndDecorations",
+            at = @At(
+                    value = "INVOKE",
+                    target = "Lnet/minecraft/client/gui/contextualbar/ContextualBar;extractRenderState(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/DeltaTracker;)V"
+            )
+    )
+    private void anima$hideVanillaXpBarFg(ContextualBar bar, GuiGraphicsExtractor g, DeltaTracker deltaTracker) {
+        if (AnimaMod.config().isBorderlands() && anima$isExperienceBar(bar)) {
+            return;
+        }
+        bar.extractRenderState(g, deltaTracker);
     }
 
     @Redirect(
@@ -89,5 +101,10 @@ public abstract class HudMixin {
         if (AnimaMod.config().isBorderlands()) {
             BorderlandsHudRenderer.renderStatusHud(g, this.minecraft);
         }
+    }
+
+    @Unique
+    private static boolean anima$isExperienceBar(ContextualBar bar) {
+        return bar != null && bar.getClass().getSimpleName().contains("Experience");
     }
 }
