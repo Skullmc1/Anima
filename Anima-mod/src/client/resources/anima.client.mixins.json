@@ -14,7 +14,8 @@
 		"ItemInHandLightMixin",
 		"FluidRendererMixin",
 		"GameRendererMixin",
-		"PauseScreenMixin"
+		"PauseScreenMixin",
+		"HudMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

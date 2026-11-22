@@ -18,12 +18,25 @@ import java.util.stream.IntStream;
  */
 public final class VoxelRenderer {
 
+    public enum ClientEngine {
+        VANILLA_26_2("Vanilla 26.2 (No Sodium)"),
+        SODIUM_0_9_2("Sodium 0.9.2 + MC 26.2");
+
+        public final String label;
+        ClientEngine(String label) { this.label = label; }
+    }
+
     private final VoxelWorld world;
     private final TextureAtlas atlas;
+    private GlShaderExecutor gpuExecutor;
 
     public VoxelRenderer(VoxelWorld world, TextureAtlas atlas) {
         this.world = world;
         this.atlas = atlas;
+    }
+
+    public void setGpuExecutor(GlShaderExecutor gpuExecutor) {
+        this.gpuExecutor = gpuExecutor;
     }
 
     public BufferedImage render(
@@ -35,6 +48,19 @@ public final class VoxelRenderer {
             AnimaAtmosphere atm,
             AnimaConfig config,
             float timeSeconds) {
+        return render(width, height, camX, camY, camZ, lookX, lookY, lookZ, fovDeg, atm, config, timeSeconds, ClientEngine.VANILLA_26_2);
+    }
+
+    public BufferedImage render(
+            int width,
+            int height,
+            float camX, float camY, float camZ,
+            float lookX, float lookY, float lookZ,
+            float fovDeg,
+            AnimaAtmosphere atm,
+            AnimaConfig config,
+            float timeSeconds,
+            ClientEngine engine) {
 
         // Build exact Minecraft 26.2 LightmapInfo UBO uniforms (identical to LightmapExtractorMixin)
         AnimaMc26Pipeline.LightmapUniforms lmUniforms = new AnimaMc26Pipeline.LightmapUniforms();
@@ -97,7 +123,7 @@ public final class VoxelRenderer {
                 dx /= dLen; dy /= dLen; dz /= dLen;
 
                 hitDepth[0] = 256.0f;
-                tracePrimaryRay(camX, camY, camZ, dx, dy, dz, atm, config, timeSeconds, lmUniforms, lightmap, fogColor, skyZenith, rgb, hitDepth);
+                tracePrimaryRay(camX, camY, camZ, dx, dy, dz, atm, config, timeSeconds, engine, lmUniforms, lightmap, fogColor, skyZenith, rgb, hitDepth);
                 int idx = py * width + px;
                 pixels[idx] = ColorMath.packRgb(rgb[0], rgb[1], rgb[2]);
                 depthBuf[idx] = hitDepth[0];
@@ -106,8 +132,10 @@ public final class VoxelRenderer {
 
         img.setRGB(0, 0, width, height, pixels, 0, width);
 
-        // Apply exact v0.14.0 fullscreen PostChain effects: borderlands, color_pencil, blueprint, or lush!
-        if (config.isBorderlands()) {
+        // Execute Anima-mod's ACTUAL OpenGL 3.3 PostChain GLSL shaders on real GPU with Reverse-Z depth!
+        if (config.isActive() && gpuExecutor != null) {
+            gpuExecutor.applyRealPostChain(img, depthBuf, config);
+        } else if (config.isBorderlands()) {
             applyBorderlandsDepthPostPass(img, depthBuf, false);
         } else if (config.isColorPencil()) {
             applyColorPencilPostPass(img, depthBuf);
@@ -164,7 +192,7 @@ public final class VoxelRenderer {
                 float dLen = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
                 dx /= dLen; dy /= dLen; dz /= dLen;
                 hitDepth[0] = 256.0f;
-                tracePrimaryRay(camX, camY, camZ, dx, dy, dz, atm, bCfg, timeSeconds, lmUniforms, lightmap, fogColor, skyZenith, rgb, hitDepth);
+                tracePrimaryRay(camX, camY, camZ, dx, dy, dz, atm, bCfg, timeSeconds, ClientEngine.VANILLA_26_2, lmUniforms, lightmap, fogColor, skyZenith, rgb, hitDepth);
                 int idx = py * width + px;
                 pixels[idx] = ColorMath.packRgb(rgb[0], rgb[1], rgb[2]);
                 depthBuf[idx] = hitDepth[0];
@@ -557,6 +585,7 @@ public final class VoxelRenderer {
             AnimaAtmosphere atm,
             AnimaConfig config,
             float timeSeconds,
+            ClientEngine engine,
             AnimaMc26Pipeline.LightmapUniforms lmUniforms,
             float[][] lightmap,
             float[] fogColor,

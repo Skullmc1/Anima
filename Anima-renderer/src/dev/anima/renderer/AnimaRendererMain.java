@@ -33,6 +33,17 @@ public final class AnimaRendererMain {
         VoxelRenderer renderer = new VoxelRenderer(world, atlas);
         System.out.printf("[Anima-renderer] World & lighting built in %d ms%n", System.currentTimeMillis() - t0);
 
+        Path mcJar = Path.of(atlas.textureSource);
+        Path sodiumJar = Path.of("C:\\Users\\Qclid\\.gemini\\antigravity\\brain\\4ef769ce-baea-4151-8ca7-2c0b32bb2b0e\\scratch\\sodium.jar");
+        try (GlShaderExecutor gpu = new GlShaderExecutor()) {
+            gpu.validateClientShaders(mcJar, sodiumJar);
+            renderer.setGpuExecutor(gpu);
+            runRenders(world, atlas, renderer, outDir, width, height, args);
+        }
+    }
+
+    private static void runRenders(VoxelWorld world, TextureAtlas atlas, VoxelRenderer renderer, Path outDir, int width, int height, String[] args) throws IOException {
+
         // Classic Minecraft first-person gameplay camera overlooking the grassy bank, pond, pier+torch, hero oak tree, and sky/sun
         float camX = 35.5f, camY = 22.4f, camZ = 24.5f;
         float lookX = 50.5f, lookY = 21.8f, lookZ = 44.0f;
@@ -155,6 +166,39 @@ public final class AnimaRendererMain {
         Path sketchPath = outDir.resolve("sketch_showcase.png");
         ImageIO.write(sketchSheet, "png", sketchPath.toFile());
         System.out.println("[Anima-renderer] Saved Sketch showcase -> " + sketchPath.toAbsolutePath());
+
+        // 2-Column Client Parity Matrix: Vanilla 26.2 (No Sodium) vs Sodium 0.9.2 Client
+        // Executed through Anima-mod's REAL OpenGL 3.3 GLSL PostChain shaders with Reverse-Z depth!
+        AnimaConfig.Preset[] parityPresets = {
+                AnimaConfig.Preset.LUSH,
+                AnimaConfig.Preset.BORDERLANDS,
+                AnimaConfig.Preset.COLOR_PENCIL,
+                AnimaConfig.Preset.BLUEPRINT
+        };
+        int pw = 640, ph = 360;
+        BufferedImage parity = new BufferedImage(pw * 2 + pad * 3, ph * parityPresets.length + pad * (parityPresets.length + 1) + headerH, BufferedImage.TYPE_INT_RGB);
+        Graphics2D pg = parity.createGraphics();
+        pg.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        pg.setColor(new Color(18, 20, 26));
+        pg.fillRect(0, 0, parity.getWidth(), parity.getHeight());
+        pg.setFont(new Font("SansSerif", Font.BOLD, 19));
+        pg.setColor(new Color(235, 240, 248));
+        pg.drawString("REAL GPU GLSL CLIENT PARITY (Reverse-Z): Vanilla 26.2 (No Sodium)  vs  Sodium 0.9.2", pad + 6, 30);
+
+        for (int i = 0; i < parityPresets.length; i++) {
+            AnimaConfig cfg = AnimaConfig.forPreset(parityPresets[i]);
+            int rowY = headerH + pad + i * (ph + pad);
+            BufferedImage imgVan = renderer.render(pw, ph, camX, camY, camZ, lookX, lookY, lookZ, fov, modeAtm, cfg, 2.5f, VoxelRenderer.ClientEngine.VANILLA_26_2);
+            BufferedImage imgSod = renderer.render(pw, ph, camX, camY, camZ, lookX, lookY, lookZ, fov, modeAtm, cfg, 2.5f, VoxelRenderer.ClientEngine.SODIUM_0_9_2);
+            pg.drawImage(imgVan, pad, rowY, null);
+            pg.drawImage(imgSod, pad * 2 + pw, rowY, null);
+            drawBadge(pg, pad + 10, rowY + 10, "VANILLA 26.2 (No Sodium) — " + cfg.preset.displayName(), new Color(25, 28, 35, 210), Color.WHITE);
+            drawBadge(pg, pad * 2 + pw + 10, rowY + 10, "SODIUM 0.9.2 + MC 26.2 — " + cfg.preset.displayName(), new Color(16, 46, 68, 215), new Color(125, 211, 252));
+        }
+        pg.dispose();
+        Path parityPath = outDir.resolve("client_parity_showcase.png");
+        ImageIO.write(parity, "png", parityPath.toFile());
+        System.out.println("[Anima-renderer] Saved Real-GPU Client Parity showcase -> " + parityPath.toAbsolutePath());
 
         // Optional 3-way Shader Pack Benchmark: Vanilla vs Anima v0.6.0 vs Iris/OptiFine Shader Pack (.zip)
         Path shaderZip = null;
