@@ -68,15 +68,24 @@ public final class BorderlandsHudRenderer {
         int panelH = 44;
         float slant = -0.22f; // Subtle Borderlands forward lean
 
-        // 1. Underwater Respiration Bar (floats cleanly right above the panel when underwater or recovering air)
+        // 1. Decorated Borderlands Nameplate Banner above the bottom-left HUD
+        String playerName = player.getName().getString();
+        int nameTextW = font.width(playerName);
+        int tagW = Math.max(76, nameTextW + 24);
+        int tagH = 13;
+        int tagX = panelX + 6;
+        int tagY = panelY - tagH - 3;
+        drawNameplateBanner(g, font, tagX, tagY, tagW, tagH, slant, playerName);
+
+        // 2. Underwater Respiration Bar (floats cleanly right above the nameplate when underwater or recovering air)
         int maxAir = Math.max(1, player.getMaxAirSupply());
         int air = Mth.clamp(player.getAirSupply(), 0, maxAir);
         boolean showAir = player.isEyeInFluid(FluidTags.WATER) || air < maxAir;
         if (showAir) {
-            renderAirBubblesPanel(g, panelX + 8, panelY - 14, 134, air, maxAir, slant);
+            renderAirBubblesPanel(g, panelX + 8, tagY - 14, 134, air, maxAir, slant);
         }
 
-        // 2. Main Slanted Backplate (outer dark comic ink + dark slate body + steel-cyan trim)
+        // 3. Main Slanted Backplate (outer dark comic ink + dark slate body + steel-cyan trim)
         drawSlantedRect(g, panelX - 1, panelY - 1, panelW + 2, panelH + 2, slant, COL_INK);
         drawSlantedRect(g, panelX, panelY, panelW, panelH, slant, COL_PANEL_BG);
         drawSlantedBorderTopBottom(g, panelX, panelY, panelW, panelH, slant, COL_PANEL_EDGE);
@@ -129,12 +138,26 @@ public final class BorderlandsHudRenderer {
             drawSlantedRect(g, barX - 1, satY, satFillW, 2, slant, COL_SAT_FILL);
         }
 
-        // Subtle player name footer on bottom edge (like Borderlands class subtitle)
-        String subtitle = player.getName().getString();
-        g.text(font, subtitle, panelX + 14, panelY + panelH + 2, 0xFFD0DCE8, true);
-
-        // 3. Tilted Chamfered Diamond EXP Level Badge (drawn on top so it overlaps the left edge of the panel!)
+        // 4. Tilted Chamfered Diamond EXP Level Badge (drawn on top so it overlaps the left edge of the panel!)
         drawExpDiamondBadge(g, font, dCx, dCy, diamondRadius, player.experienceLevel, player.experienceProgress);
+    }
+
+    /**
+     * Draws the decorated Borderlands nameplate banner sitting directly above the bottom-left status HUD.
+     */
+    private static void drawNameplateBanner(GuiGraphicsExtractor g, Font font, int x, int y, int w, int h, float slant, String name) {
+        // Outer dark comic ink silhouette
+        drawSlantedRect(g, x - 1, y - 1, w + 2, h + 2, slant, COL_INK);
+        // Dark metallic slate body
+        drawSlantedRect(g, x, y, w, h, slant, 0xE2101824);
+        // Top cyan highlight + bottom steel trim + right bevel edge
+        drawSlantedBorderTopBottom(g, x, y, w, h, slant, COL_PANEL_EDGE);
+        g.fill(x + 4, y, x + w - 2, y + 1, 0x6638BDF8);
+        // Signature Borderlands golden-amber left chevron accent bar + mini diamond pip
+        drawSlantedRect(g, x, y, 4, h, slant, COL_GOLD);
+        g.fill(x + 7, y + h / 2 - 1, x + 10, y + h / 2 + 2, COL_GOLD);
+        // Crisp bold-look player name
+        g.text(font, name, x + 14, y + 3, 0xFFF8FAFC, true);
     }
 
     /**

@@ -36,16 +36,17 @@ void main() {
     bool isSky = (d0 <= 0.000001);
     float lum = luminance(col);
 
-    // 1. Clean Borderlands Cel-Shading (balanced 1.14x saturation, 5 crisp comic tone bands, no poison green!)
-    vec3 sat = clamp(mix(vec3(lum), col, 1.14), 0.0, 1.0);
+    // 1. Clean Borderlands Cel-Shading (subtle 1.04x saturation + smooth 32% 7-band comic tone so textures stay crisp & never blotchy!)
+    vec3 sat = clamp(mix(vec3(lum), col, 1.04), 0.0, 1.0);
     vec3 finalCol = sat;
     if (!isSky) {
-        float bands = 5.0;
+        float bands = 7.0;
         float scaled = lum * bands;
         float baseBand = floor(scaled);
-        float frac = smoothstep(0.34, 0.66, fract(scaled));
-        float celLum = clamp((baseBand + frac + 0.16) / (bands + 0.16), 0.05, 1.0);
-        finalCol = clamp(sat * (celLum / max(0.035, lum)), 0.0, 1.0);
+        float frac = smoothstep(0.18, 0.82, fract(scaled));
+        float celLum = clamp((baseBand + frac + 0.12) / (bands + 0.12), 0.04, 1.0);
+        vec3 celCol = clamp(sat * (celLum / max(0.035, lum)), 0.0, 1.0);
+        finalCol = mix(sat, celCol, 0.32);
     }
 
     // 2. Reverse-Z Linear-Plane Curvature & Silhouette Outlines
