@@ -8,16 +8,13 @@ import java.nio.file.Path;
 import java.util.Properties;
 
 /**
- * Configuration and quality presets for Anima.
- * Every preset is shader-free and designed for ultra-high FPS even on integrated GPUs.
+ * Configuration for Anima (Lush mode ON / Vanilla OFF).
  */
 public final class AnimaConfig {
 
     public enum Preset {
         VANILLA("Vanilla (Off)"),
-        POTATO("Potato (Ultra-Fast)"),
-        BALANCED("Balanced"),
-        LUSH("Lush (Cinematic)");
+        LUSH("Lush");
 
         private final String displayName;
 
@@ -27,11 +24,6 @@ public final class AnimaConfig {
 
         public String displayName() {
             return displayName;
-        }
-
-        public Preset next() {
-            Preset[] values = values();
-            return values[(ordinal() + 1) % values.length];
         }
     }
 
@@ -46,17 +38,23 @@ public final class AnimaConfig {
     public boolean foliageEnhancement = true;
     public boolean dynamicHandheldLight = true;
 
-    public float warmthStrength = 1.0f;
-    public float shadowDepth = 0.85f;
-    public float fogDensity = 0.72f;
-    public float waterClarity = 0.85f;
+    public float warmthStrength = 1.05f;
+    public float shadowDepth = 0.88f;
+    public float fogDensity = 0.62f;
+    public float waterClarity = 0.92f;
     public float saturationBoost = 1.14f;
-    public float filmicStrength = 0.55f;
+    public float filmicStrength = 0.58f;
     public float torchFlicker = 0.35f;
 
     public static AnimaConfig vanilla() {
         AnimaConfig c = new AnimaConfig();
         c.applyPreset(Preset.VANILLA);
+        return c;
+    }
+
+    public static AnimaConfig lush() {
+        AnimaConfig c = new AnimaConfig();
+        c.applyPreset(Preset.LUSH);
         return c;
     }
 
@@ -86,40 +84,6 @@ public final class AnimaConfig {
                 filmicStrength = 0f;
                 torchFlicker = 0f;
             }
-            case POTATO -> {
-                enabled = true;
-                atmosphericLightmap = true;
-                skyEnhancement = true;
-                atmosphericFog = true;
-                waterEnhancement = true;
-                directionalShading = false;
-                foliageEnhancement = true;
-                dynamicHandheldLight = true;
-                warmthStrength = 0.82f;
-                shadowDepth = 0.65f;
-                fogDensity = 0.55f;
-                waterClarity = 0.70f;
-                saturationBoost = 1.08f;
-                filmicStrength = 0.38f;
-                torchFlicker = 0.0f;
-            }
-            case BALANCED -> {
-                enabled = true;
-                atmosphericLightmap = true;
-                skyEnhancement = true;
-                atmosphericFog = true;
-                waterEnhancement = true;
-                directionalShading = true;
-                foliageEnhancement = true;
-                dynamicHandheldLight = true;
-                warmthStrength = 0.92f;
-                shadowDepth = 0.78f;
-                fogDensity = 0.68f;
-                waterClarity = 0.80f;
-                saturationBoost = 1.11f;
-                filmicStrength = 0.48f;
-                torchFlicker = 0.25f;
-            }
             case LUSH -> {
                 enabled = true;
                 atmosphericLightmap = true;
@@ -131,17 +95,17 @@ public final class AnimaConfig {
                 dynamicHandheldLight = true;
                 warmthStrength = 1.05f;
                 shadowDepth = 0.88f;
-                fogDensity = 0.76f;
-                waterClarity = 0.88f;
-                saturationBoost = 1.15f;
-                filmicStrength = 0.56f;
+                fogDensity = 0.62f;
+                waterClarity = 0.92f;
+                saturationBoost = 1.14f;
+                filmicStrength = 0.58f;
                 torchFlicker = 0.35f;
             }
         }
     }
 
     public boolean isActive() {
-        return enabled && preset != Preset.VANILLA;
+        return enabled && preset == Preset.LUSH;
     }
 
     public void load(Path path) {
@@ -152,10 +116,11 @@ public final class AnimaConfig {
         Properties props = new Properties();
         try (InputStream in = Files.newInputStream(path)) {
             props.load(in);
-            String pName = props.getProperty("preset", Preset.LUSH.name());
-            try {
-                applyPreset(Preset.valueOf(pName.toUpperCase()));
-            } catch (IllegalArgumentException ignored) {
+            String pName = props.getProperty("preset", Preset.LUSH.name()).toUpperCase();
+            // Automatically migrate legacy POTATO / BALANCED presets to LUSH
+            if ("VANILLA".equals(pName)) {
+                applyPreset(Preset.VANILLA);
+            } else {
                 applyPreset(Preset.LUSH);
             }
             enabled = Boolean.parseBoolean(props.getProperty("enabled", String.valueOf(enabled)));
@@ -186,7 +151,7 @@ public final class AnimaConfig {
                 Files.createDirectories(path.getParent());
             }
             try (OutputStream out = Files.newOutputStream(path)) {
-                props.store(out, "Anima Mod Configuration - Shader-free atmospheric visuals");
+                props.store(out, "Anima Mod Configuration - Lush Shader-Free Visuals");
             }
         } catch (IOException ignored) {
         }

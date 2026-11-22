@@ -104,44 +104,6 @@ public final class AnimaRendererMain {
         ImageIO.write(sheet, "png", sheetPath.toFile());
         System.out.println("[Anima-renderer] Saved comparison sheet -> " + sheetPath.toAbsolutePath());
 
-        // Render 4-preset comparison at Golden Hour (Vanilla vs Potato vs Balanced vs Lush)
-        AnimaAtmosphere goldenAtm = new AnimaAtmosphere(11350f, 0f);
-        AnimaConfig.Preset[] presets = AnimaConfig.Preset.values();
-        int pw = 640, ph = 360;
-
-        // Warm up JIT across presets so displayed timings accurately reflect steady-state cost
-        for (AnimaConfig.Preset p : presets) {
-            renderer.render(160, 90, camX, camY, camZ, lookX, lookY, lookZ, fov, goldenAtm, AnimaConfig.forPreset(p), 2.5f);
-        }
-
-        BufferedImage presetSheet = new BufferedImage(pw * 2 + pad * 3, ph * 2 + pad * 3 + headerH, BufferedImage.TYPE_INT_RGB);
-        Graphics2D pg = presetSheet.createGraphics();
-        pg.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        pg.setColor(new Color(18, 20, 26));
-        pg.fillRect(0, 0, presetSheet.getWidth(), presetSheet.getHeight());
-        pg.setFont(new Font("SansSerif", Font.BOLD, 18));
-        pg.setColor(new Color(235, 240, 248));
-        pg.drawString("ANIMA MOD — Quality Presets Comparison (Golden Hour, Zero GPU Shaders)", pad + 6, 30);
-
-        for (int i = 0; i < presets.length; i++) {
-            AnimaConfig pCfg = AnimaConfig.forPreset(presets[i]);
-            long ps0 = System.currentTimeMillis();
-            BufferedImage pImg = renderer.render(pw, ph, camX, camY, camZ, lookX, lookY, lookZ, fov, goldenAtm, pCfg, 2.5f);
-            long pMs = System.currentTimeMillis() - ps0;
-            int col = i % 2;
-            int row = i / 2;
-            int px = pad + col * (pw + pad);
-            int py = headerH + pad + row * (ph + pad);
-            pg.drawImage(pImg, px, py, null);
-            Color badgeBg = (presets[i] == AnimaConfig.Preset.VANILLA) ? new Color(25, 28, 35, 195) : new Color(18, 48, 62, 210);
-            Color badgeFg = (presets[i] == AnimaConfig.Preset.VANILLA) ? Color.WHITE : new Color(165, 240, 255);
-            drawBadge(pg, px + 12, py + 12, presets[i].displayName() + " (" + pMs + " ms)", badgeBg, badgeFg);
-        }
-        pg.dispose();
-        Path presetPath = outDir.resolve("presets_sheet.png");
-        ImageIO.write(presetSheet, "png", presetPath.toFile());
-        System.out.println("[Anima-renderer] Saved presets sheet -> " + presetPath.toAbsolutePath());
-
         // Dedicated Sun & Wavy Water comparison (camera aimed directly toward the Golden Hour sun over the pond!)
         AnimaAtmosphere sunAtm = new AnimaAtmosphere(10900f, 0f);
         float sCamX = 48.0f, sCamY = 21.5f, sCamZ = 22.0f;
@@ -158,11 +120,11 @@ public final class AnimaRendererMain {
         sg.fillRect(0, 0, sunSheet.getWidth(), sunSheet.getHeight());
         sg.setFont(new Font("SansSerif", Font.BOLD, 20));
         sg.setColor(new Color(235, 240, 248));
-        sg.drawString("ANIMA v0.6.0 — Radiant Sun & Seamless Wavy Water (Vanilla vs Anima Lush)", pad + 6, 30);
+        sg.drawString("ANIMA v0.7.0 (Lush) — Pixel-Art Sun & Crystal Wavy Water (Vanilla vs Anima Lush)", pad + 6, 30);
         sg.drawImage(sunVan, pad, headerH + pad, null);
         sg.drawImage(sunAni, pad * 2 + width, headerH + pad, null);
         drawBadge(sg, pad + 14, headerH + pad + 14, "VANILLA — Square Sun & Flat Water", new Color(25, 28, 35, 195), Color.WHITE);
-        drawBadge(sg, pad * 2 + width + 14, headerH + pad + 14, "ANIMA v0.6.0 — Radiant Sun & Seamless Wavy Water", new Color(18, 48, 62, 210), new Color(165, 240, 255));
+        drawBadge(sg, pad * 2 + width + 14, headerH + pad + 14, "ANIMA v0.7.0 (Lush) — Crystal Water & Pixel-Art Sun", new Color(18, 48, 62, 210), new Color(165, 240, 255));
         sg.dispose();
         Path sunPath = outDir.resolve("sun_showcase.png");
         ImageIO.write(sunSheet, "png", sunPath.toFile());
@@ -200,7 +162,7 @@ public final class AnimaRendererMain {
             cg.fillRect(0, 0, cmp.getWidth(), cmp.getHeight());
             cg.setFont(new Font("SansSerif", Font.BOLD, 20));
             cg.setColor(new Color(235, 240, 248));
-            cg.drawString("3-WAY BENCHMARK: Vanilla 26.2  vs  Anima v0.6.0 (Zero-Shader Mod)  vs  " + pack.name + " (" + pack.glslFileCount + " GLSL files)", pad + 6, 30);
+            cg.drawString("3-WAY BENCHMARK: Vanilla 26.2  vs  Anima v0.7.0 Lush (Zero-Shader Mod)  vs  " + pack.name + " (" + pack.glslFileCount + " GLSL files)", pad + 6, 30);
 
             for (int i = 0; i < scenarios.length; i++) {
                 Scenario s = scenarios[i];
@@ -231,7 +193,7 @@ public final class AnimaRendererMain {
                 cg.drawImage(imgS, pad * 3 + cw * 2, rowY, null);
 
                 drawBadge(cg, pad + 10, rowY + 10, "VANILLA — " + s.id.toUpperCase() + " (" + tvMs + "ms)", new Color(25, 28, 35, 195), Color.WHITE);
-                drawBadge(cg, pad * 2 + cw + 10, rowY + 10, "ANIMA v0.6.0 — " + s.id.toUpperCase() + " (" + taMs + "ms)", new Color(18, 48, 62, 210), new Color(165, 240, 255));
+                drawBadge(cg, pad * 2 + cw + 10, rowY + 10, "ANIMA v0.7.0 LUSH — " + s.id.toUpperCase() + " (" + taMs + "ms)", new Color(18, 48, 62, 210), new Color(165, 240, 255));
                 drawBadge(cg, pad * 3 + cw * 2 + 10, rowY + 10, pack.name + " (" + tsMs + "ms)", new Color(58, 28, 18, 210), new Color(255, 215, 155));
 
                 System.out.printf("[Anima-renderer] 3-Way %-7s | Vanilla: %3d ms | Anima: %3d ms | %s: %3d ms%n", s.id, tvMs, taMs, pack.name, tsMs);

@@ -60,11 +60,13 @@ public final class AnimaFogEngine {
     }
 
     /**
-     * Returns recommended (fogStart, fogEnd) multipliers relative to vanilla render distance
-     * for Minecraft's native FogRenderer hook.
+     * Returns recommended fogStart multiplier relative to render distance.
+     * Keeps midday hills crisp like Complementary Reimagined while adding lush haze at golden hour.
      */
     public static float fogStartMultiplier(AnimaAtmosphere atm, AnimaConfig config) {
         if (!config.isActive() || !config.atmosphericFog) return 0.75f;
-        return ColorMath.clamp(0.45f - 0.14f * config.fogDensity - 0.08f * atm.goldenHourFactor, 0.15f, 0.75f);
+        float middayStart = 0.62f - 0.10f * config.fogDensity;
+        float goldenStart = 0.28f;
+        return ColorMath.clamp(ColorMath.lerp(middayStart, goldenStart, atm.goldenHourFactor), 0.22f, 0.75f);
     }
 }

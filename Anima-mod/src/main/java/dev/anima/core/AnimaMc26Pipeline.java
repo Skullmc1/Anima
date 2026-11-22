@@ -60,22 +60,25 @@ public final class AnimaMc26Pipeline {
 
         float warmth = ColorMath.clamp01(cfg.warmthStrength);
 
-        // 1. Warm golden-white midday sunlight, rich sunset amber, crisp silver-blue moonlight
-        float skyR = ColorMath.lerp(0.46f, ColorMath.lerp(1.14f, 1.24f, atm.goldenHourFactor), atm.dayFactor);
-        float skyG = ColorMath.lerp(0.64f, ColorMath.lerp(1.03f, 0.72f, atm.goldenHourFactor), atm.dayFactor);
-        float skyB = ColorMath.lerp(1.04f, ColorMath.lerp(0.86f, 0.36f, atm.goldenHourFactor), atm.dayFactor);
+        // 1. Complementary-inspired warm golden-white midday sunlight, rich sunset amber, luminous midnight-blue moonlight
+        float skyR = ColorMath.lerp(0.56f, ColorMath.lerp(1.22f, 1.28f, atm.goldenHourFactor), atm.dayFactor);
+        float skyG = ColorMath.lerp(0.74f, ColorMath.lerp(1.10f, 0.72f, atm.goldenHourFactor), atm.dayFactor);
+        float skyB = ColorMath.lerp(1.18f, ColorMath.lerp(0.88f, 0.36f, atm.goldenHourFactor), atm.dayFactor);
 
-        u.skyLightColor[0] = ColorMath.lerp(u.skyLightColor[0], skyR, 0.85f * warmth);
-        u.skyLightColor[1] = ColorMath.lerp(u.skyLightColor[1], skyG, 0.85f * warmth);
-        u.skyLightColor[2] = ColorMath.lerp(u.skyLightColor[2], skyB, 0.85f * warmth);
+        u.skyLightColor[0] = ColorMath.lerp(u.skyLightColor[0], skyR, 0.88f * warmth);
+        u.skyLightColor[1] = ColorMath.lerp(u.skyLightColor[1], skyG, 0.88f * warmth);
+        u.skyLightColor[2] = ColorMath.lerp(u.skyLightColor[2], skyB, 0.88f * warmth);
 
-        // 2. Cool atmospheric shadow fill instead of vanilla flat gray
-        u.ambientColor[0] = ColorMath.lerp(0.05f, ColorMath.lerp(0.05f, 0.14f, atm.goldenHourFactor), atm.dayFactor);
-        u.ambientColor[1] = ColorMath.lerp(0.09f, ColorMath.lerp(0.10f, 0.08f, atm.goldenHourFactor), atm.dayFactor);
-        u.ambientColor[2] = ColorMath.lerp(0.22f, ColorMath.lerp(0.21f, 0.22f, atm.goldenHourFactor), atm.dayFactor);
+        // Lift night skyFactor slightly for Complementary's luminous moonlit night readability
+        u.skyFactor = Math.max(u.skyFactor, 0.28f * atm.nightFactor);
+
+        // 2. Cool atmospheric shadow fill (luminous blue-indigo at night, crisp sky-blue in daytime shade)
+        u.ambientColor[0] = ColorMath.lerp(0.08f, ColorMath.lerp(0.06f, 0.14f, atm.goldenHourFactor), atm.dayFactor);
+        u.ambientColor[1] = ColorMath.lerp(0.13f, ColorMath.lerp(0.11f, 0.09f, atm.goldenHourFactor), atm.dayFactor);
+        u.ambientColor[2] = ColorMath.lerp(0.27f, ColorMath.lerp(0.23f, 0.23f, atm.goldenHourFactor), atm.dayFactor);
 
         // 3. Shape vanilla gamma lift for deeper shadow contrast
-        float contrastFactor = ColorMath.lerp(0.82f, 0.48f, cfg.shadowDepth);
+        float contrastFactor = ColorMath.lerp(0.80f, 0.50f, cfg.shadowDepth);
         u.brightnessFactor = u.brightnessFactor * contrastFactor;
 
         // 4. Warm 2600K incandescent torch/lantern block light with subtle organic flicker
@@ -84,9 +87,9 @@ public final class AnimaMc26Pipeline {
             flicker += (float) (Math.sin(elapsedSeconds * 7.3) * 0.025 + Math.sin(elapsedSeconds * 13.7) * 0.015) * cfg.torchFlicker;
         }
         u.blockLightTint[0] = 1.00f * flicker;
-        u.blockLightTint[1] = 0.50f * flicker;
-        u.blockLightTint[2] = 0.13f * flicker;
-        u.blockFactor = ColorMath.clamp(u.blockFactor * (1.28f + 0.30f * atm.nightFactor), 0f, 1.85f);
+        u.blockLightTint[1] = 0.52f * flicker;
+        u.blockLightTint[2] = 0.14f * flicker;
+        u.blockFactor = ColorMath.clamp(u.blockFactor * (1.32f + 0.36f * atm.nightFactor), 0f, 1.90f);
     }
 
     /**

@@ -14,9 +14,9 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Injects Anima's shader-free atmospheric lightmap directly into Minecraft 26.2's
- * LightmapRenderState: warm golden-white sunlight, deep cool-blue atmospheric shadow
- * contrast, silver-blue moonlight, and rich incandescent 2600K torchlight.
+ * Injects Anima Lush's Complementary-inspired atmospheric lightmap into Minecraft 26.2:
+ * warm golden-white midday sunlight, rich sunset amber, luminous midnight-blue moonlight,
+ * cool atmospheric shadows, and warm 2600K incandescent torchlight.
  */
 @Mixin(LightmapRenderStateExtractor.class)
 public class LightmapExtractorMixin {
@@ -30,40 +30,41 @@ public class LightmapExtractorMixin {
 
         AnimaAtmosphere atm = AnimaClientMod.atmosphere();
         float t = AnimaClientMod.elapsedSeconds();
+        float warmth = ColorMath.clamp01(cfg.warmthStrength);
 
-        // 1. Rich warm sunlight at midday, blazing amber-gold at golden hour, cool silver-blue at night
-        float warmth = cfg.warmthStrength;
-        float skyR = ColorMath.lerp(0.46f, ColorMath.lerp(1.14f, 1.24f, atm.goldenHourFactor), atm.dayFactor);
-        float skyG = ColorMath.lerp(0.64f, ColorMath.lerp(1.03f, 0.72f, atm.goldenHourFactor), atm.dayFactor);
-        float skyB = ColorMath.lerp(1.04f, ColorMath.lerp(0.86f, 0.36f, atm.goldenHourFactor), atm.dayFactor);
+        // 1. Complementary-inspired warm sunlight & luminous moonlight
+        float skyR = ColorMath.lerp(0.56f, ColorMath.lerp(1.22f, 1.28f, atm.goldenHourFactor), atm.dayFactor);
+        float skyG = ColorMath.lerp(0.74f, ColorMath.lerp(1.10f, 0.72f, atm.goldenHourFactor), atm.dayFactor);
+        float skyB = ColorMath.lerp(1.18f, ColorMath.lerp(0.88f, 0.36f, atm.goldenHourFactor), atm.dayFactor);
 
         state.skyLightColor = new Vector3f(
-                ColorMath.lerp(state.skyLightColor.x(), skyR, 0.85f * ColorMath.clamp01(warmth)),
-                ColorMath.lerp(state.skyLightColor.y(), skyG, 0.85f * ColorMath.clamp01(warmth)),
-                ColorMath.lerp(state.skyLightColor.z(), skyB, 0.85f * ColorMath.clamp01(warmth))
+                ColorMath.lerp(state.skyLightColor.x(), skyR, 0.88f * warmth),
+                ColorMath.lerp(state.skyLightColor.y(), skyG, 0.88f * warmth),
+                ColorMath.lerp(state.skyLightColor.z(), skyB, 0.88f * warmth)
         );
+        state.skyFactor = Math.max(state.skyFactor, 0.28f * atm.nightFactor);
 
-        // 2. Deep cool atmospheric shadow fill (replaces vanilla's flat washed-out gray)
-        float ambR = ColorMath.lerp(0.05f, ColorMath.lerp(0.05f, 0.14f, atm.goldenHourFactor), atm.dayFactor);
-        float ambG = ColorMath.lerp(0.09f, ColorMath.lerp(0.10f, 0.08f, atm.goldenHourFactor), atm.dayFactor);
-        float ambB = ColorMath.lerp(0.22f, ColorMath.lerp(0.21f, 0.22f, atm.goldenHourFactor), atm.dayFactor);
+        // 2. Cool atmospheric shadow fill (luminous blue-indigo at night, crisp sky-blue in shade)
+        float ambR = ColorMath.lerp(0.08f, ColorMath.lerp(0.06f, 0.14f, atm.goldenHourFactor), atm.dayFactor);
+        float ambG = ColorMath.lerp(0.13f, ColorMath.lerp(0.11f, 0.09f, atm.goldenHourFactor), atm.dayFactor);
+        float ambB = ColorMath.lerp(0.27f, ColorMath.lerp(0.23f, 0.23f, atm.goldenHourFactor), atm.dayFactor);
         state.ambientColor = new Vector3f(ambR, ambG, ambB);
 
-        // 3. Shape vanilla gamma lift so crevices & shadows keep cinematic depth
-        float contrastFactor = ColorMath.lerp(0.82f, 0.48f, cfg.shadowDepth);
+        // 3. Shape vanilla gamma lift for deeper shadow contrast
+        float contrastFactor = ColorMath.lerp(0.80f, 0.50f, cfg.shadowDepth);
         state.brightness = state.brightness * contrastFactor;
 
-        // 4. Warm 2600K incandescent torch/lantern block light with gentle organic flicker
+        // 4. Warm 2600K incandescent torch/lantern block light with subtle organic flicker
         float flicker = 1.0f;
         if (cfg.torchFlicker > 0.001f) {
             flicker += (float) (Math.sin(t * 7.3) * 0.025 + Math.sin(t * 13.7) * 0.015) * cfg.torchFlicker;
         }
         state.blockLightTint = new Vector3f(
                 1.00f * flicker,
-                0.50f * flicker,
-                0.13f * flicker
+                0.52f * flicker,
+                0.14f * flicker
         );
-        state.blockFactor = ColorMath.clamp(state.blockFactor * (1.28f + 0.30f * atm.nightFactor), 0f, 1.85f);
+        state.blockFactor = ColorMath.clamp(state.blockFactor * (1.32f + 0.36f * atm.nightFactor), 0f, 1.90f);
         state.needsUpdate = true;
     }
 }

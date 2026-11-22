@@ -23,7 +23,6 @@ public class AnimaClientMod implements ClientModInitializer {
     private static volatile float elapsedSeconds = 0f;
 
     private static KeyMapping toggleKey;
-    private static KeyMapping cyclePresetKey;
 
     public static AnimaAtmosphere atmosphere() {
         return currentAtmosphere;
@@ -41,24 +40,18 @@ public class AnimaClientMod implements ClientModInitializer {
                 GLFW.GLFW_KEY_F9,
                 KeyMapping.Category.MISC
         ));
-        cyclePresetKey = KeyMappingHelper.registerKeyMapping(new KeyMapping(
-                "key.anima.cycle_preset",
-                InputConstants.Type.KEYSYM,
-                GLFW.GLFW_KEY_F10,
-                KeyMapping.Category.MISC
-        ));
 
         FabricLoader.getInstance().getModContainer(AnimaMod.MOD_ID).ifPresent(container ->
                 ResourceLoader.registerBuiltinPack(
                         Identifier.fromNamespaceAndPath(AnimaMod.MOD_ID, "anima_shaders"),
                         container,
-                        Component.literal("Anima Shaders (Vanilla & Sodium)"),
+                        Component.literal("Anima Lush Shaders (Vanilla & Sodium)"),
                         PackActivationType.ALWAYS_ENABLED
                 )
         );
 
         ClientTickEvents.END_CLIENT_TICK.register(AnimaClientMod::onClientTick);
-        AnimaMod.LOGGER.info("Anima client pipeline ready (Vanilla & Sodium 26.2, OpenGL & Vulkan compatible)");
+        AnimaMod.LOGGER.info("Anima Lush client pipeline ready (Vanilla & Sodium 26.2, OpenGL & Vulkan compatible)");
     }
 
     private static void onClientTick(Minecraft client) {
@@ -73,28 +66,17 @@ public class AnimaClientMod implements ClientModInitializer {
 
         while (toggleKey.consumeClick()) {
             AnimaConfig cfg = AnimaMod.config();
-            cfg.enabled = !cfg.enabled;
-            if (cfg.enabled && cfg.preset == AnimaConfig.Preset.VANILLA) {
+            if (cfg.isActive()) {
+                cfg.applyPreset(AnimaConfig.Preset.VANILLA);
+            } else {
                 cfg.applyPreset(AnimaConfig.Preset.LUSH);
             }
             cfg.save(AnimaMod.configPath());
             refreshSurroundingChunks(client);
-            notifyPlayer(client, "Anima: " + (cfg.isActive() ? "ON (" + cfg.preset.displayName() + ")" : "OFF (Vanilla)"));
-        }
-
-        while (cyclePresetKey.consumeClick()) {
-            AnimaConfig cfg = AnimaMod.config();
-            cfg.applyPreset(cfg.preset.next());
-            cfg.save(AnimaMod.configPath());
-            refreshSurroundingChunks(client);
-            notifyPlayer(client, "Anima Preset: " + cfg.preset.displayName());
+            notifyPlayer(client, cfg.isActive() ? "Anima: ON (Lush)" : "Anima: OFF (Vanilla)");
         }
     }
 
-    /**
-     * Immediately marks nearby chunk sections dirty so biome grass/foliage/water tints
-     * and dynamic handheld lighting update the instant Anima is toggled.
-     */
     public static void refreshSurroundingChunks(Minecraft client) {
         if (client.level == null || client.player == null) {
             return;

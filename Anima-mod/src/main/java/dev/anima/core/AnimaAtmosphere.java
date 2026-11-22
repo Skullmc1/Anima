@@ -83,27 +83,27 @@ public final class AnimaAtmosphere {
         ColorMath.lerpRgb(noonShadow, goldenShadow, goldenHourFactor, dayShadow);
         ColorMath.lerpRgb(nightShadow, dayShadow, dayFactor, shadowTintColor);
 
-        // 4. Sky zenith & horizon colors
-        float[] noonZenith = {0.12f, 0.38f, 0.85f};
-        float[] goldenZenith = {0.16f, 0.21f, 0.49f};
-        float[] nightZenith = {0.02f, 0.05f, 0.14f};
+        // 4. Sky zenith & horizon colors (Complementary Reimagined-inspired palettes)
+        float[] noonZenith = {0.14f, 0.42f, 0.88f};
+        float[] goldenZenith = {0.18f, 0.24f, 0.54f};
+        float[] nightZenith = {0.04f, 0.09f, 0.24f};
 
         float[] dayZenith = new float[3];
         ColorMath.lerpRgb(noonZenith, goldenZenith, goldenHourFactor, dayZenith);
         ColorMath.lerpRgb(nightZenith, dayZenith, dayFactor, zenithColor);
 
-        float[] noonHorizon = {0.64f, 0.84f, 0.99f};
-        float[] goldenHorizon = {1.00f, 0.56f, 0.30f};
-        float[] nightHorizon = {0.09f, 0.15f, 0.29f};
+        float[] noonHorizon = {0.66f, 0.85f, 0.99f};
+        float[] goldenHorizon = {1.00f, 0.58f, 0.30f};
+        float[] nightHorizon = {0.12f, 0.20f, 0.39f};
 
         float[] dayHorizon = new float[3];
         ColorMath.lerpRgb(noonHorizon, goldenHorizon, goldenHourFactor, dayHorizon);
         ColorMath.lerpRgb(nightHorizon, dayHorizon, dayFactor, horizonColor);
 
         // 5. Atmospheric perspective fog color
-        float[] noonFog = {0.64f, 0.82f, 0.97f};
-        float[] goldenFog = {0.95f, 0.58f, 0.36f};
-        float[] nightFog = {0.07f, 0.12f, 0.24f};
+        float[] noonFog = {0.66f, 0.84f, 0.98f};
+        float[] goldenFog = {0.95f, 0.60f, 0.38f};
+        float[] nightFog = {0.10f, 0.17f, 0.34f};
 
         float[] dayFog = new float[3];
         ColorMath.lerpRgb(noonFog, goldenFog, goldenHourFactor, dayFog);

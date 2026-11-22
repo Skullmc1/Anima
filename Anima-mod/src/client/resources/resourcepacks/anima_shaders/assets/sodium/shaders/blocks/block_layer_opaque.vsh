@@ -12,6 +12,7 @@ out vec2 v_FragDistance;
 out float fadeFactor;
 #endif
 
+out float v_AnimaActive;
 out float v_AnimaWater;
 out vec3 v_WaterRelPos;
 out vec2 v_WaterPhaseCoord;
@@ -50,27 +51,46 @@ void main() {
     vec3 position = _vert_position + translation;
 
     float animaTime = float(u_CurrentTime & 1048575) * 0.001;
+    const float H = 0.3926990817; // 2*PI / 16.0 -> seamless across all chunks & regions
 
-    // 1. Seamless Animated Wavy Water in Sodium
-    // Exact 16-block harmonic base frequency (2*PI / 16.0) guarantees ZERO seams across chunk & region borders!
-    const float H = 0.3926990817;
-    float animaWaterOn = (fract(u_EnvironmentFog.y) > 0.25) ? 1.0 : 0.0;
+    float animaOn = (fract(u_EnvironmentFog.y) > 0.25) ? 1.0 : 0.0;
+    vec2 phaseCoord = _vert_position.xz + drawTrans.xz;
     float fy = fract(_vert_position.y);
-    // Only displace top air-exposed water surfaces (still water = 8/9 = 0.8888), smoothly tapered for flowing slopes
-    float isWaterCandidate = (animaWaterOn > 0.5 && fy > 0.12 && fy < 0.96 && _vert_color.b > _vert_color.r * 1.12) ? 1.0 : 0.0;
     float wave = 0.0;
+    float isWaterCandidate = 0.0;
 
-    vec2 waterCoord = _vert_position.xz + drawTrans.xz;
-
+    // 1. Zero-Cost Wind-Swaying Foliage & Sunlit Subsurface Glow (Leaves, Tall Grass, Flowers)
+    vec3 sssTint = vec3(1.0);
+#ifdef ALPHA_CUTOUT
+    if (animaOn > 0.5) {
+        float skyL = _vert_tex_light_coord.y;
+        // Gentle organic wind sway on outdoor cutout foliage (leaves, grass, flowers)
+        if (skyL > 0.35 && _vert_color.g > _vert_color.b * 0.92) {
+            float gust = sin(phaseCoord.x * (2.0 * H) + phaseCoord.y * (1.0 * H) + animaTime * 1.9)
+                       + cos(phaseCoord.x * (3.0 * H) - phaseCoord.y * (2.0 * H) + animaTime * 1.3) * 0.5;
+            float swayMask = smoothstep(0.05, 0.90, fy);
+            // Leaves (high green/dark) sway gently all over; ground plants anchor at bottom (fy=0)
+            float amp = 0.026 * (0.35 + 0.65 * swayMask);
+            position.x += gust * amp;
+            position.z += cos(phaseCoord.x * (1.0 * H) + phaseCoord.y * (3.0 * H) + animaTime * 1.6) * amp * 0.7;
+        }
+        // Subtle Complementary-style sunlit foliage subsurface glow
+        if (skyL > 0.80 && _vert_color.g > _vert_color.r * 1.05) {
+            sssTint = vec3(1.09, 1.12, 0.96);
+        }
+    }
+#else
+    // 2. Seamless Animated Wavy Water (only on translucent water pass!)
+    isWaterCandidate = (animaOn > 0.5 && fy > 0.12 && fy < 0.96 && _vert_color.b > _vert_color.r * 1.12) ? 1.0 : 0.0;
     if (isWaterCandidate > 0.5) {
-        // Taper wave height on steep flowing edges (fy < 0.75) so flowing water never tears
         float surfaceMask = smoothstep(0.65, 0.86, fy);
-        float w1 = sin(waterCoord.x * (3.0 * H) + waterCoord.y * (2.0 * H) + animaTime * 2.5) * 0.044;
-        float w2 = cos(waterCoord.x * (2.0 * H) - waterCoord.y * (4.0 * H) + animaTime * 1.9) * 0.028;
-        float w3 = sin((waterCoord.x + waterCoord.y) * (5.0 * H) - animaTime * 3.2) * 0.012;
+        float w1 = sin(phaseCoord.x * (3.0 * H) + phaseCoord.y * (2.0 * H) + animaTime * 2.4) * 0.042;
+        float w2 = cos(phaseCoord.x * (2.0 * H) - phaseCoord.y * (4.0 * H) + animaTime * 1.8) * 0.026;
+        float w3 = sin((phaseCoord.x + phaseCoord.y) * (5.0 * H) - animaTime * 3.1) * 0.011;
         wave = (w1 + w2 + w3) * surfaceMask;
         position.y += wave;
     }
+#endif
 
 #ifdef USE_FOG
     v_FragDistance = getFragDistance(position);
@@ -83,7 +103,7 @@ void main() {
 
     gl_Position = u_ProjectionMatrix * u_ModelViewMatrix * vec4(position, 1.0);
 
-    // 2. Zero-Lag Per-Frame GPU Dynamic Handheld Lighting (encoded in fract(u_RenderFog.y) by FogRendererMixin!)
+    // 3. Zero-Lag Per-Frame GPU Dynamic Handheld Lighting (encoded in fract(u_RenderFog.y))
     vec2 lightCoord = _vert_tex_light_coord;
     float heldLum = clamp(fract(u_RenderFog.y) * (16.0 / 0.96), 0.0, 15.0);
     if (heldLum > 0.05) {
@@ -93,11 +113,14 @@ void main() {
         lightCoord.x = max(lightCoord.x, dynCoord);
     }
 
-    v_Color = _vert_color * texture(u_LightTex, lightCoord);
+    vec4 lit = _vert_color * texture(u_LightTex, lightCoord);
+    lit.rgb *= sssTint;
+    v_Color = lit;
     v_TexCoord = (_vert_tex_diffuse_coord_bias * u_TexCoordShrink) + _vert_tex_diffuse_coord;
+    v_AnimaActive = animaOn;
     v_AnimaWater = isWaterCandidate;
     v_WaterRelPos = position;
-    v_WaterPhaseCoord = waterCoord;
+    v_WaterPhaseCoord = phaseCoord;
     v_WaveHeight = wave;
     v_WaterTime = animaTime;
 }

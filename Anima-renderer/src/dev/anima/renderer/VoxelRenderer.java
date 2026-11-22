@@ -211,38 +211,44 @@ public final class VoxelRenderer {
                             float waterAlpha = ColorMath.clamp01(0.62f + depthFog * 0.25f);
 
                             if (config.isActive() && config.waterEnhancement) {
-                                float wt = timeSeconds * 3.6f;
-                                float w1 = (float) Math.sin(waterHitX * 1.15 + waterHitZ * 0.78 + wt * 2.4) * 0.048f;
-                                float w2 = (float) Math.cos(waterHitX * 0.72 - waterHitZ * 1.42 + wt * 1.85) * 0.032f;
+                                final float H = 0.3926990817f;
+                                float wt = timeSeconds * 2.4f;
+                                float w1 = (float) Math.sin(waterHitX * (3.0f * H) + waterHitZ * (2.0f * H) + wt) * 0.042f;
+                                float w2 = (float) Math.cos(waterHitX * (2.0f * H) - waterHitZ * (4.0f * H) + wt * 0.75f) * 0.026f;
                                 float wave = w1 + w2;
-                                float r1 = (float) (Math.sin(waterHitX * 3.2 + waterHitZ * 2.1 + wt * 3.1) * Math.cos(waterHitX * 2.0 - waterHitZ * 3.5 + wt * 2.4));
-                                float r2 = (float) Math.sin(waterHitX * 5.8 - waterHitZ * 5.1 - wt * 3.8);
-                                float r3 = (float) Math.cos(waterHitX * 9.0 + waterHitZ * 7.5 + wt * 4.6) * 0.35f;
-                                float ripple = r1 * 0.55f + r2 * 0.30f + r3 * 0.15f;
+                                float r1 = (float) (Math.sin(waterHitX * (6.0f * H) + waterHitZ * (4.0f * H) + wt * 1.1f) * Math.cos(waterHitX * (4.0f * H) - waterHitZ * (7.0f * H) + wt * 0.85f));
+                                float r2 = (float) Math.sin(waterHitX * (12.0f * H) - waterHitZ * (10.0f * H) - wt * 1.35f);
+                                float ripple = r1 * 0.65f + r2 * 0.35f;
 
-                                float cosTheta = ColorMath.clamp(Math.abs(dy) + ripple * 0.12f, 0.05f, 1.0f);
-                                float fresnel = 0.16f + 0.74f * (float) Math.pow(1.0f - cosTheta, 2.2);
+                                float cosTheta = ColorMath.clamp(Math.abs(dy) + ripple * 0.07f, 0.04f, 1.0f);
+                                float fresnel = 0.08f + 0.78f * (float) Math.pow(1.0f - cosTheta, 3.0);
 
-                                float skyR = fogColor[0] * 1.15f;
-                                float skyG = fogColor[1] * 1.15f;
-                                float skyB = fogColor[2] * 1.15f;
-                                float crest = ColorMath.smoothstep(0.01f, 0.07f, wave + ripple * 0.03f) * 0.32f;
-                                float shimmer = ColorMath.smoothstep(0.50f, 0.92f, ripple) * 0.28f;
+                                float skyR = fogColor[0] * 1.06f;
+                                float skyG = fogColor[1] * 1.06f;
+                                float skyB = fogColor[2] * 1.06f;
+                                float spec = (float) Math.pow(Math.max(0f, ripple * 0.5f + 0.5f), 7.0) * 0.32f;
+                                float crest = ColorMath.smoothstep(0.025f, 0.068f, wave) * 0.14f;
 
-                                wr = ColorMath.clamp01(ColorMath.lerp(wr * 0.76f, skyR, fresnel * 0.72f) + (skyR * 0.65f + 0.35f) * (crest + shimmer));
-                                wg = ColorMath.clamp01(ColorMath.lerp(wg * 1.12f, skyG, fresnel * 0.72f) + (skyG * 0.65f + 0.35f) * (crest + shimmer));
-                                wb = ColorMath.clamp01(ColorMath.lerp(wb * 1.16f, skyB, fresnel * 0.72f) + (skyB * 0.65f + 0.35f) * (crest + shimmer));
-                                waterAlpha = ColorMath.clamp(ColorMath.lerp(waterAlpha * 0.78f, 0.95f, fresnel), 0.42f, 0.96f);
+                                wr = ColorMath.clamp01(ColorMath.lerp(wr * 0.45f, skyR, fresnel * 0.78f) + (skyR * 0.75f + 0.25f) * (spec + crest));
+                                wg = ColorMath.clamp01(ColorMath.lerp(wg * 0.96f, skyG, fresnel * 0.78f) + (skyG * 0.75f + 0.25f) * (spec + crest));
+                                wb = ColorMath.clamp01(ColorMath.lerp(wb * 1.12f, skyB, fresnel * 0.78f) + (skyB * 0.75f + 0.25f) * (spec + crest));
+                                waterAlpha = ColorMath.clamp(ColorMath.lerp(0.50f, 0.90f, fresnel), 0.45f, 0.92f);
                             }
 
                             outRgb[0] = ColorMath.lerp(surfaceRgb[0], wr, waterAlpha);
                             outRgb[1] = ColorMath.lerp(surfaceRgb[1], wg, waterAlpha);
                             outRgb[2] = ColorMath.lerp(surfaceRgb[2], wb, waterAlpha);
+                            if (config.isActive()) {
+                                applyAnimaFilmicGrade(outRgb);
+                            }
                             applyMc26Fog(waterHitT, atm, config, fogColor, outRgb);
                         } else {
                             outRgb[0] = surfaceRgb[0];
                             outRgb[1] = surfaceRgb[1];
                             outRgb[2] = surfaceRgb[2];
+                            if (config.isActive()) {
+                                applyAnimaFilmicGrade(outRgb);
+                            }
                             applyMc26Fog(t, atm, config, fogColor, outRgb);
                         }
                         return;
@@ -425,6 +431,11 @@ public final class VoxelRenderer {
                 }
             }
         }
+    }
+
+    private static void applyAnimaFilmicGrade(float[] rgb) {
+        ColorMath.applyFilmicPolish(rgb, 0.42f);
+        ColorMath.adjustSaturation(rgb, 1.12f);
     }
 
     private void applyMc26Fog(float dist, AnimaAtmosphere atm, AnimaConfig config, float[] fogColor, float[] rgb) {
