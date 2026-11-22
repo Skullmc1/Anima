@@ -127,7 +127,7 @@ public final class AnimaConfig {
                 shadowDepth = 0.96f;
                 fogDensity = 0.38f;
                 waterClarity = 0.85f;
-                saturationBoost = 1.38f;
+                saturationBoost = 1.16f;
                 filmicStrength = 0.45f;
                 torchFlicker = 0.25f;
             }

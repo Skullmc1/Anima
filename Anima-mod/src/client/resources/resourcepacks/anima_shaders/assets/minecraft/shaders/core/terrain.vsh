@@ -21,6 +21,7 @@ out float vAnimaActive;
 out float vAnimaWater;
 out vec3 vWaterWorldPos;
 out vec3 vWaterRelPos;
+out vec3 vBlockLocalPos;
 out float vWaveHeight;
 
 void main() {
@@ -62,14 +63,13 @@ void main() {
     if (isWater > 0.5) {
         float fy = fract(Position.y);
         float surfaceMask = smoothstep(0.65, 0.86, fy);
-        float w1 = sin(worldPos.x * (3.0 * H) + worldPos.z * (2.0 * H) + t * 2.4) * 0.042;
-        float w2 = cos(worldPos.x * (2.0 * H) - worldPos.z * (4.0 * H) + t * 1.8) * 0.026;
-        float w3 = sin((worldPos.x + worldPos.z) * (5.0 * H) - t * 3.1) * 0.011;
+        float w1 = sin(worldPos.x * (3.0 * H) + worldPos.z * (2.0 * H) + t * 2.3) * 0.045;
+        float w2 = cos(worldPos.x * (2.0 * H) - worldPos.z * (4.0 * H) + t * 1.7) * 0.028;
+        float w3 = sin((worldPos.x + worldPos.z) * (5.0 * H) - t * 3.0) * 0.012;
         wave = (w1 + w2 + w3) * surfaceMask;
         pos.y += wave;
     }
 
-    // Zero-lag per-frame GPU dynamic handheld lighting (encoded in fract(FogRenderDistanceEnd))
     float heldLum = clamp(fract(FogRenderDistanceEnd) * (16.0 / 0.96), 0.0, 15.0);
     ivec2 finalUV2 = UV2;
     if (heldLum > 0.05) {
@@ -91,5 +91,6 @@ void main() {
     vAnimaWater = isWater;
     vWaterWorldPos = worldPos;
     vWaterRelPos = pos;
+    vBlockLocalPos = Position;
     vWaveHeight = wave;
 }

@@ -16,6 +16,7 @@ out float v_AnimaActive;
 out float v_AnimaWater;
 out vec3 v_WaterRelPos;
 out vec2 v_WaterPhaseCoord;
+out vec3 v_BlockLocalPos;
 out float v_WaveHeight;
 out float v_WaterTime;
 
@@ -66,29 +67,26 @@ void main() {
 #ifdef ALPHA_CUTOUT
     if (animaOn > 0.5) {
         float skyL = _vert_tex_light_coord.y;
-        // Gentle organic wind sway on outdoor cutout foliage (leaves, grass, flowers)
         if (skyL > 0.35 && _vert_color.g > _vert_color.b * 0.92) {
             float gust = sin(phaseCoord.x * (2.0 * H) + phaseCoord.y * (1.0 * H) + animaTime * 1.9)
                        + cos(phaseCoord.x * (3.0 * H) - phaseCoord.y * (2.0 * H) + animaTime * 1.3) * 0.5;
             float swayMask = smoothstep(0.05, 0.90, fy);
-            // Leaves (high green/dark) sway gently all over; ground plants anchor at bottom (fy=0)
             float amp = 0.026 * (0.35 + 0.65 * swayMask);
             position.x += gust * amp;
             position.z += cos(phaseCoord.x * (1.0 * H) + phaseCoord.y * (3.0 * H) + animaTime * 1.6) * amp * 0.7;
         }
-        // Subtle Complementary-style sunlit foliage subsurface glow
         if (skyL > 0.80 && _vert_color.g > _vert_color.r * 1.05) {
             sssTint = vec3(1.09, 1.12, 0.96);
         }
     }
 #else
-    // 2. Seamless Animated Wavy Water (only on translucent water pass!)
+    // 2. Seamless Complementary-Style Animated Wavy Water (only on translucent water pass!)
     isWaterCandidate = (animaOn > 0.5 && fy > 0.12 && fy < 0.96 && _vert_color.b > _vert_color.r * 1.12) ? 1.0 : 0.0;
     if (isWaterCandidate > 0.5) {
         float surfaceMask = smoothstep(0.65, 0.86, fy);
-        float w1 = sin(phaseCoord.x * (3.0 * H) + phaseCoord.y * (2.0 * H) + animaTime * 2.4) * 0.042;
-        float w2 = cos(phaseCoord.x * (2.0 * H) - phaseCoord.y * (4.0 * H) + animaTime * 1.8) * 0.026;
-        float w3 = sin((phaseCoord.x + phaseCoord.y) * (5.0 * H) - animaTime * 3.1) * 0.011;
+        float w1 = sin(phaseCoord.x * (3.0 * H) + phaseCoord.y * (2.0 * H) + animaTime * 2.3) * 0.045;
+        float w2 = cos(phaseCoord.x * (2.0 * H) - phaseCoord.y * (4.0 * H) + animaTime * 1.7) * 0.028;
+        float w3 = sin((phaseCoord.x + phaseCoord.y) * (5.0 * H) - animaTime * 3.0) * 0.012;
         wave = (w1 + w2 + w3) * surfaceMask;
         position.y += wave;
     }
@@ -123,6 +121,7 @@ void main() {
     v_AnimaWater = isWaterCandidate;
     v_WaterRelPos = position;
     v_WaterPhaseCoord = phaseCoord;
+    v_BlockLocalPos = _vert_position;
     v_WaveHeight = wave;
     v_WaterTime = animaTime;
 }

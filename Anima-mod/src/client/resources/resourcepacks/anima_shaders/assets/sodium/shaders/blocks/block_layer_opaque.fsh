@@ -13,6 +13,7 @@ in float v_AnimaActive;
 in float v_AnimaWater;
 in vec3 v_WaterRelPos;
 in vec2 v_WaterPhaseCoord;
+in vec3 v_BlockLocalPos;
 in float v_WaveHeight;
 in float v_WaterTime;
 
@@ -89,36 +90,58 @@ vec3 animaFilmicGrade(vec3 c) {
     return clamp(mix(vec3(lum), graded, 1.12), 0.0, 1.0);
 }
 
-// Borderlands Cel-Shaded Comic Pipeline: stepped cel bands + punchy saturation + crisp ink outlines (no poison green!)
-vec3 animaBorderlandsGrade(vec3 c, vec3 relPos) {
-    // 1. Punchy Borderlands saturation & warm crisp contrast
+// Borderlands Cel-Shaded Comic Pipeline: crisp 3D block-edge ink outlines + stepped cel bands + clean saturation
+vec3 animaBorderlandsGrade(vec3 c, vec3 relPos, vec3 localPos) {
     float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
-    vec3 sat = clamp(mix(vec3(lum), c, 1.42), 0.0, 1.0);
+    // Clean, balanced Borderlands saturation (1.16x — punchy without neon blowout!)
+    vec3 sat = clamp(mix(vec3(lum), c, 1.16), 0.0, 1.0);
 
-    // 2. Stepped comic cel-shading luminance bands (4.5 crisp bands with anti-aliased transitions)
+    // 4.5 crisp cel-shading luminance bands
     float bands = 4.5;
     float scaled = lum * bands;
     float baseBand = floor(scaled);
-    float frac = smoothstep(0.38, 0.62, fract(scaled));
-    float celLum = clamp((baseBand + frac + 0.15) / (bands + 0.15), 0.05, 1.0);
+    float frac = smoothstep(0.36, 0.64, fract(scaled));
+    float celLum = clamp((baseBand + frac + 0.18) / (bands + 0.18), 0.06, 1.0);
     vec3 cel = clamp(sat * (celLum / max(0.04, lum)), 0.0, 1.0);
-    // Subtle dark shadow crush for graphic comic punch
-    cel = mix(cel, cel * cel * 1.18, 0.25);
 
-    // 3. Crisp comic-book ink outlines via screen-space geometry & luminance edge detection
+    // True 3D Block-Edge Ink Outlines (measures exact screen-pixel distance to block borders!)
     float dist = length(relPos);
-    vec3 dPosX = dFdx(relPos);
-    vec3 dPosY = dFdy(relPos);
-    vec3 faceN = normalize(cross(dPosX, dPosY) + vec3(1e-6));
-    float normalEdge = length(fwidth(faceN));
-    float depthEdge = fwidth(dist) / max(1.0, dist * 0.085);
-    float lumEdge = fwidth(lum) * 2.2;
+    vec3 fw = fwidth(localPos);
+    vec3 fp = fract(localPos);
+    vec3 distToBorder = min(fp, 1.0 - fp);
 
-    float distFade = 1.0 - smoothstep(24.0, 68.0, dist);
-    float outline = smoothstep(0.55, 1.15, normalEdge * 1.45 + depthEdge * 0.65 + lumEdge * 0.55) * distFade;
+    // Only check axes that actually vary across this face (ignore the constant face-normal axis!)
+    float pxX = (fw.x > 0.0004) ? (distToBorder.x / fw.x) : 99.0;
+    float pxY = (fw.y > 0.0004) ? (distToBorder.y / fw.y) : 99.0;
+    float pxZ = (fw.z > 0.0004) ? (distToBorder.z / fw.z) : 99.0;
+    float minPxEdge = min(pxX, min(pxY, pxZ));
+
+    // Crisp ~1.35px dark comic ink line around block edges + subtle texture contrast ink
+    float distFade = 1.0 - smoothstep(18.0, 48.0, dist);
+    float blockOutline = (1.0 - smoothstep(0.55, 1.45, minPxEdge)) * 0.85 * distFade;
+    float texInk = smoothstep(0.14, 0.34, fwidth(lum)) * 0.42 * distFade;
+    float ink = clamp(max(blockOutline, texInk), 0.0, 0.88);
 
     vec3 inkColor = vec3(0.06, 0.05, 0.08);
-    return mix(cel, inkColor, clamp(outline * 0.88, 0.0, 0.88));
+    return mix(cel, inkColor, ink);
+}
+
+// Complementary Reimagined-inspired 3-scale scrolling animated water normal (big + medium + small waves)
+vec3 complementaryWaterNormal(vec2 wp, float t) {
+    const float H = 0.3926990817; // 2*PI/16 seamless harmonic
+    // 1. Slow rolling big swells
+    float b1 = cos(wp.x * (2.0 * H) + wp.y * (1.0 * H) - t * 0.9);
+    float b2 = sin(wp.x * (1.0 * H) - wp.y * (3.0 * H) - t * 0.7);
+    // 2. Medium drifting wind ripples
+    float m1 = cos(wp.x * (6.0 * H) + wp.y * (4.0 * H) + t * 2.2);
+    float m2 = sin(wp.x * (4.0 * H) - wp.y * (7.0 * H) + t * 1.8);
+    // 3. Fast counter-scrolling small sparkles
+    float s1 = cos(wp.x * (14.0 * H) - wp.y * (11.0 * H) - t * 3.6);
+    float s2 = sin(wp.x * (11.0 * H) + wp.y * (15.0 * H) - t * 3.1);
+
+    float nx = b1 * 0.055 + m1 * 0.075 + s1 * 0.045;
+    float nz = b2 * 0.055 + m2 * 0.075 + s2 * 0.045;
+    return normalize(vec3(nx, 1.0, nz));
 }
 
 void main() {
@@ -130,38 +153,37 @@ void main() {
         discard;
     }
 #else
-    // Crystal-Clear Complementary-Style Water (seamless 16-block harmonic ripples, glassy reflections)
+    // Complementary Reimagined-Style Animated Water (true 3-scale scrolling normal, Fresnel sky gradient, dancing sun glints!)
     if (v_AnimaWater > 0.5 && color.a < 0.98 && color.a > 0.12) {
-        const float H = 0.3926990817;
-        float t = v_WaterTime;
-        vec2 wp = v_WaterPhaseCoord;
-
-        // Analytical dual-octave water wave slope for crisp glassy normal highlights (no milky noise!)
-        float r1 = sin(wp.x * (6.0 * H) + wp.y * (4.0 * H) + t * 2.6) * cos(wp.x * (4.0 * H) - wp.y * (7.0 * H) + t * 2.0);
-        float r2 = sin(wp.x * (12.0 * H) - wp.y * (10.0 * H) - t * 3.2);
-        float ripple = r1 * 0.65 + r2 * 0.35;
-
+        vec3 N = complementaryWaterNormal(v_WaterPhaseCoord, v_WaterTime);
         vec3 viewDir = normalize(v_WaterRelPos);
-        float cosTheta = clamp(abs(viewDir.y) + ripple * 0.07, 0.04, 1.0);
-        float fresnel = 0.08 + 0.78 * pow(1.0 - cosTheta, 3.0);
+        vec3 R = reflect(viewDir, N);
 
-        // Rich crystal turquoise-sapphire water body (shows riverbed clearly at steep angles!)
-        vec3 waterBody = color.rgb * vec3(0.45, 0.96, 1.12);
-        vec3 skyRefl = u_FogColor.rgb * 1.06;
+        float ndotv = clamp(dot(-viewDir, N), 0.02, 1.0);
+        float fresnel = 0.06 + 0.82 * pow(1.0 - ndotv, 3.6);
 
-        // Crisp delicate specular glint only on sharp wave peaks
-        float spec = pow(max(0.0, ripple * 0.5 + 0.5), 7.0) * 0.32;
-        float crest = smoothstep(0.025, 0.068, v_WaveHeight) * 0.14;
+        // Complementary-style sky gradient reflection along reflected ray R.y
+        vec3 horizonCol = u_FogColor.rgb * 1.12;
+        vec3 zenithCol = u_FogColor.rgb * vec3(0.42, 0.64, 1.12);
+        vec3 skyRefl = mix(horizonCol, zenithCol, clamp(R.y * 1.35, 0.0, 1.0));
 
-        color.rgb = mix(waterBody, skyRefl, fresnel * 0.78);
-        color.rgb += (skyRefl * 0.75 + vec3(0.25)) * (spec + crest);
-        // Crystal-clear ~0.52 alpha looking down, smoothly rising to 0.90 reflective sheen at horizon!
-        color.a = clamp(mix(0.50, 0.90, fresnel), 0.45, 0.92);
+        // Dancing animated specular glints on tilted wave facets (mimics Complementary's sparkling water!)
+        vec3 sunDir = normalize(vec3(0.45, 0.52, 0.72));
+        float specSharp = pow(max(0.0, dot(R, sunDir)), 42.0) * 0.95;
+        float specBroad = pow(max(0.0, dot(R, normalize(vec3(-0.35, 0.65, 0.67)))), 18.0) * 0.25;
+        float skyBright = clamp(dot(u_FogColor.rgb, vec3(0.333)) * 1.8, 0.08, 1.0);
+        vec3 specCol = (horizonCol * 0.65 + vec3(0.35)) * (specSharp + specBroad) * skyBright;
+
+        // Complementary crystal-clear deep turquoise-sapphire water body
+        vec3 waterBody = pow(max(color.rgb, vec3(0.0)), vec3(1.18)) * vec3(0.50, 1.02, 1.16);
+
+        color.rgb = mix(waterBody, skyRefl, fresnel * 0.84) + specCol;
+        color.a = clamp(mix(0.46, 0.92, fresnel), 0.42, 0.94);
     }
 #endif
 
     if (v_AnimaActive > 1.5) {
-        color.rgb = animaBorderlandsGrade(color.rgb, v_WaterRelPos);
+        color.rgb = animaBorderlandsGrade(color.rgb, v_WaterRelPos, v_BlockLocalPos);
     } else if (v_AnimaActive > 0.5) {
         color.rgb = animaFilmicGrade(color.rgb);
     }
