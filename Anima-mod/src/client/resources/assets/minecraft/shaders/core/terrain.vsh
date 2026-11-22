@@ -26,29 +26,38 @@ void main() {
     vec3 worldPos = Position + vec3(ChunkPosition);
     vec3 pos = Position + (ChunkPosition - CameraBlockPos) + CameraOffset;
 
-    // Water vertices are tagged with Color.a = 254/255 (~0.99608) by Anima's FluidRendererMixin
+    // 1. Animated Wavy Water (tagged with Color.a = 254/255 by FluidRendererMixin when Anima is ON)
     float isWater = (Color.a < 0.998 && Color.a > 0.990) ? 1.0 : 0.0;
     vec4 cleanColor = Color;
     float wave = 0.0;
 
     if (isWater > 0.5) {
         cleanColor.a = 1.0;
-        // Multi-directional animated surface waves (only displace top water vertices, keeping block bottoms sealed)
-        float t = GameTime * 1400.0;
-        float w1 = sin(worldPos.x * 1.10 + worldPos.z * 0.72 + t * 2.1) * 0.030;
-        float w2 = cos(worldPos.x * 0.68 - worldPos.z * 1.38 + t * 1.65) * 0.022;
-        float w3 = sin((worldPos.x + worldPos.z) * 2.15 - t * 2.9) * 0.010;
+        float t = GameTime * 3600.0;
+        float w1 = sin(worldPos.x * 1.15 + worldPos.z * 0.78 + t * 2.4) * 0.048;
+        float w2 = cos(worldPos.x * 0.72 - worldPos.z * 1.42 + t * 1.85) * 0.032;
+        float w3 = sin((worldPos.x + worldPos.z) * 2.25 - t * 3.2) * 0.015;
         wave = w1 + w2 + w3;
-        // Only wave vertices near the top surface of the water block (fract(y) > 0.15)
-        float topMask = smoothstep(0.10, 0.35, fract(Position.y));
+        float topMask = smoothstep(0.05, 0.25, fract(Position.y));
         pos.y += wave * topMask;
+    }
+
+    // 2. Zero-Lag Per-Frame GPU Dynamic Handheld Lighting (60/120/240+ FPS, zero chunk rebuilds!)
+    // Smooth wall-clock faded luminance (0..15) is encoded in fract(FogSkyEnd).
+    float heldLum = clamp(fract(FogSkyEnd) * (16.0 / 0.96), 0.0, 15.0);
+    ivec2 finalUV2 = UV2;
+    if (heldLum > 0.05) {
+        float dist = length(pos);
+        float dynBlock = max(0.0, heldLum - dist * 1.02);
+        int dynUV = int(clamp(dynBlock * 16.0, 0.0, 240.0));
+        finalUV2.x = max(finalUV2.x, dynUV);
     }
 
     gl_Position = ProjMat * ModelViewMat * vec4(pos, 1.0);
 
     sphericalVertexDistance = fog_spherical_distance(pos);
     cylindricalVertexDistance = fog_cylindrical_distance(pos);
-    vertexColor = cleanColor * sample_lightmap(Sampler2, UV2);
+    vertexColor = cleanColor * sample_lightmap(Sampler2, finalUV2);
     texCoord0 = UV0;
     vAnimaWater = isWater;
     vWaterWorldPos = worldPos;

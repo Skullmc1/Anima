@@ -4,6 +4,7 @@ import dev.anima.AnimaMod;
 import dev.anima.client.AnimaClientMod;
 import dev.anima.core.AnimaAtmosphere;
 import dev.anima.core.AnimaConfig;
+import dev.anima.core.AnimaDynamicLightEngine;
 import dev.anima.core.AnimaFogEngine;
 import dev.anima.core.ColorMath;
 import net.minecraft.client.Camera;
@@ -45,6 +46,14 @@ public class AtmosphericFogMixin {
     @Inject(method = "setupFog", at = @At("TAIL"))
     private void anima$setupAerialPerspective(FogData fogData, Camera camera, ClientLevel level, float renderDistance, DeltaTracker deltaTracker, CallbackInfo ci) {
         AnimaConfig cfg = AnimaMod.config();
+
+        // Always encode per-frame smooth handheld light luminance (0..15) in FogSkyEnd's fractional part
+        // so terrain.vsh computes zero-lag, full-FPS dynamic handheld lighting with zero chunk rebuilds!
+        float heldLum = (cfg.isActive() && cfg.dynamicHandheldLight)
+                ? AnimaDynamicLightEngine.sampleSmoothPlayerLuminance()
+                : 0f;
+        fogData.skyEnd = (float) Math.floor(Math.max(16.0f, fogData.skyEnd)) + (heldLum / 16.0f) * 0.96f;
+
         if (!cfg.isActive() || !cfg.atmosphericFog) {
             return;
         }

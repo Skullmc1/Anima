@@ -211,28 +211,28 @@ public final class VoxelRenderer {
                             float waterAlpha = ColorMath.clamp01(0.62f + depthFog * 0.25f);
 
                             if (config.isActive() && config.waterEnhancement) {
-                                float wt = timeSeconds * 1.4f;
-                                float w1 = (float) Math.sin(waterHitX * 1.10 + waterHitZ * 0.72 + wt * 2.1) * 0.030f;
-                                float w2 = (float) Math.cos(waterHitX * 0.68 - waterHitZ * 1.38 + wt * 1.65) * 0.022f;
+                                float wt = timeSeconds * 3.6f;
+                                float w1 = (float) Math.sin(waterHitX * 1.15 + waterHitZ * 0.78 + wt * 2.4) * 0.048f;
+                                float w2 = (float) Math.cos(waterHitX * 0.72 - waterHitZ * 1.42 + wt * 1.85) * 0.032f;
                                 float wave = w1 + w2;
-                                float r1 = (float) (Math.sin(waterHitX * 3.4 + waterHitZ * 2.2 + wt * 2.8) * Math.cos(waterHitX * 2.1 - waterHitZ * 3.6 + wt * 2.1));
-                                float r2 = (float) Math.sin(waterHitX * 6.2 - waterHitZ * 5.4 - wt * 3.5);
-                                float ripple = r1 * 0.65f + r2 * 0.35f;
+                                float r1 = (float) (Math.sin(waterHitX * 3.2 + waterHitZ * 2.1 + wt * 3.1) * Math.cos(waterHitX * 2.0 - waterHitZ * 3.5 + wt * 2.4));
+                                float r2 = (float) Math.sin(waterHitX * 5.8 - waterHitZ * 5.1 - wt * 3.8);
+                                float r3 = (float) Math.cos(waterHitX * 9.0 + waterHitZ * 7.5 + wt * 4.6) * 0.35f;
+                                float ripple = r1 * 0.55f + r2 * 0.30f + r3 * 0.15f;
 
-                                float cosTheta = ColorMath.clamp(Math.abs(dy) + ripple * 0.06f, 0.04f, 1.0f);
-                                float m = 1.0f - cosTheta;
-                                float fresnel = 0.06f + 0.68f * (m * m * m * m);
+                                float cosTheta = ColorMath.clamp(Math.abs(dy) + ripple * 0.12f, 0.05f, 1.0f);
+                                float fresnel = 0.16f + 0.74f * (float) Math.pow(1.0f - cosTheta, 2.2);
 
-                                float skyR = fogColor[0] * 1.08f;
-                                float skyG = fogColor[1] * 1.08f;
-                                float skyB = fogColor[2] * 1.08f;
-                                float crest = ColorMath.smoothstep(0.015f, 0.055f, wave + ripple * 0.025f) * 0.22f;
-                                float shimmer = ColorMath.smoothstep(0.55f, 0.96f, ripple) * 0.16f;
+                                float skyR = fogColor[0] * 1.15f;
+                                float skyG = fogColor[1] * 1.15f;
+                                float skyB = fogColor[2] * 1.15f;
+                                float crest = ColorMath.smoothstep(0.01f, 0.07f, wave + ripple * 0.03f) * 0.32f;
+                                float shimmer = ColorMath.smoothstep(0.50f, 0.92f, ripple) * 0.28f;
 
-                                wr = ColorMath.clamp01(ColorMath.lerp(wr * 0.88f, skyR, fresnel * 0.68f) + (skyR * 0.65f + 0.35f) * (crest + shimmer));
-                                wg = ColorMath.clamp01(ColorMath.lerp(wg * 1.04f, skyG, fresnel * 0.68f) + (skyG * 0.65f + 0.35f) * (crest + shimmer));
-                                wb = ColorMath.clamp01(ColorMath.lerp(wb * 1.08f, skyB, fresnel * 0.68f) + (skyB * 0.65f + 0.35f) * (crest + shimmer));
-                                waterAlpha = ColorMath.clamp(ColorMath.lerp(waterAlpha * 0.84f, 0.94f, fresnel), 0.45f, 0.96f);
+                                wr = ColorMath.clamp01(ColorMath.lerp(wr * 0.76f, skyR, fresnel * 0.72f) + (skyR * 0.65f + 0.35f) * (crest + shimmer));
+                                wg = ColorMath.clamp01(ColorMath.lerp(wg * 1.12f, skyG, fresnel * 0.72f) + (skyG * 0.65f + 0.35f) * (crest + shimmer));
+                                wb = ColorMath.clamp01(ColorMath.lerp(wb * 1.16f, skyB, fresnel * 0.72f) + (skyB * 0.65f + 0.35f) * (crest + shimmer));
+                                waterAlpha = ColorMath.clamp(ColorMath.lerp(waterAlpha * 0.78f, 0.95f, fresnel), 0.42f, 0.96f);
                             }
 
                             outRgb[0] = ColorMath.lerp(surfaceRgb[0], wr, waterAlpha);

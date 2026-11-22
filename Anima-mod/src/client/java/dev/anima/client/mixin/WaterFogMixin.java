@@ -3,6 +3,7 @@ package dev.anima.client.mixin;
 import dev.anima.AnimaMod;
 import dev.anima.client.AnimaClientMod;
 import dev.anima.core.AnimaConfig;
+import dev.anima.core.AnimaDynamicLightEngine;
 import dev.anima.core.AnimaWaterEngine;
 import net.minecraft.client.Camera;
 import net.minecraft.client.DeltaTracker;
@@ -35,6 +36,12 @@ public class WaterFogMixin {
     @Inject(method = "setupFog", at = @At("TAIL"))
     private void anima$enhanceWaterClarity(FogData fogData, Camera camera, ClientLevel level, float renderDistance, DeltaTracker deltaTracker, CallbackInfo ci) {
         AnimaConfig cfg = AnimaMod.config();
+
+        float heldLum = (cfg.isActive() && cfg.dynamicHandheldLight)
+                ? AnimaDynamicLightEngine.sampleSmoothPlayerLuminance()
+                : 0f;
+        fogData.skyEnd = (float) Math.floor(Math.max(16.0f, fogData.skyEnd)) + (heldLum / 16.0f) * 0.96f;
+
         if (!cfg.isActive() || !cfg.waterEnhancement) {
             return;
         }

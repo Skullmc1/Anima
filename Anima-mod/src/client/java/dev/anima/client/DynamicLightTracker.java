@@ -16,9 +16,11 @@ import net.minecraft.world.phys.AABB;
 import java.util.List;
 
 /**
- * Tracks light-emitting blocks/items held in the player's main hand or offhand
- * AND nearby dropped luminous ItemEntities, driving smooth fading transitions
- * in AnimaDynamicLightEngine and refreshing affected chunk sections.
+ * Tracks player handheld light sources (main hand + offhand) and nearby dropped luminous items.
+ *
+ * Player handheld light is rendered 100% per-frame on the GPU (terrain.vsh) with ZERO chunk
+ * rebuilds and ZERO lag! Chunk section refreshes are ONLY triggered when dropped luminous
+ * items move or appear/disappear on the ground.
  */
 public final class DynamicLightTracker {
 
@@ -27,8 +29,8 @@ public final class DynamicLightTracker {
     private static final double[] droppedZ = new double[AnimaDynamicLightEngine.MAX_SOURCES];
     private static final float[] droppedLum = new float[AnimaDynamicLightEngine.MAX_SOURCES];
 
-    private static boolean wasActive = false;
-    private static int tickCounter = 0;
+    private static int prevDroppedCount = 0;
+    private static double prevDroppedHash = 0.0;
 
     private DynamicLightTracker() {}
 
@@ -38,19 +40,17 @@ public final class DynamicLightTracker {
         AnimaConfig cfg = AnimaMod.config();
 
         if (level == null || player == null || !cfg.isActive() || !cfg.dynamicHandheldLight) {
-            if (wasActive) {
+            if (prevDroppedCount > 0 && level != null && player != null) {
                 AnimaDynamicLightEngine.clear();
-                wasActive = false;
-                if (level != null && player != null) {
-                    markSectionsAround(level, player.getX(), player.getY(), player.getZ(), 16);
-                }
+                markSectionsAround(level, player.getX(), player.getY(), player.getZ(), 24);
+                prevDroppedCount = 0;
+            } else {
+                AnimaDynamicLightEngine.clear();
             }
             return;
         }
 
-        tickCounter++;
-
-        // 1. Player main hand & offhand
+        // 1. Player main hand & offhand (zero chunk rebuilds — handled per-frame in GPU!)
         boolean submerged = player.isUnderWater();
         int mainLight = getItemLuminance(player.getMainHandItem(), submerged);
         int offLight = getItemLuminance(player.getOffhandItem(), submerged);
@@ -62,6 +62,7 @@ public final class DynamicLightTracker {
 
         // 2. Scan nearby dropped luminous ItemEntities (within 22 blocks)
         int dCount = 0;
+        double posHash = 0.0;
         AABB searchBox = player.getBoundingBox().inflate(22.0);
         List<ItemEntity> items = level.getEntitiesOfClass(ItemEntity.class, searchBox);
         for (int i = 0; i < items.size() && dCount < AnimaDynamicLightEngine.MAX_SOURCES - 1; i++) {
@@ -72,37 +73,29 @@ public final class DynamicLightTracker {
                 droppedY[dCount] = ie.getY() + 0.25;
                 droppedZ[dCount] = ie.getZ();
                 droppedLum[dCount] = lum;
+                posHash += Math.round(ie.getX() * 2.0) * 31.0 + Math.round(ie.getY() * 2.0) * 17.0 + Math.round(ie.getZ() * 2.0) * 13.0 + lum;
                 dCount++;
             }
         }
 
-        // 3. Smoothly fade luminance & glide position in AnimaDynamicLightEngine
-        boolean changed = AnimaDynamicLightEngine.updateFrame(
+        AnimaDynamicLightEngine.updateTick(
                 px, py, pz, targetPlayerLum,
                 droppedX, droppedY, droppedZ, droppedLum, dCount
         );
 
-        boolean nowActive = AnimaDynamicLightEngine.isActive();
-
-        // Throttle slightly on Potato preset (every 2 ticks), smooth every tick on Balanced/Lush
-        boolean allowedThisTick = (cfg.preset != AnimaConfig.Preset.POTATO) || ((tickCounter & 1) == 0);
-
-        if ((changed || wasActive != nowActive) && allowedThisTick) {
-            if (nowActive || wasActive) {
-                markSectionsAround(level, px, py, pz, Math.max(targetPlayerLum, 14) + 2);
-                for (int i = 0; i < dCount; i++) {
-                    markSectionsAround(level, droppedX[i], droppedY[i], droppedZ[i], (int) droppedLum[i] + 2);
-                }
+        // ONLY refresh chunk sections if dropped luminous items moved/spawned/despawned!
+        if (dCount != prevDroppedCount || Math.abs(posHash - prevDroppedHash) > 0.1) {
+            for (int i = 0; i < dCount; i++) {
+                markSectionsAround(level, droppedX[i], droppedY[i], droppedZ[i], (int) droppedLum[i] + 2);
             }
+            if (dCount < prevDroppedCount) {
+                markSectionsAround(level, px, py, pz, 24);
+            }
+            prevDroppedCount = dCount;
+            prevDroppedHash = posHash;
         }
-
-        wasActive = nowActive;
     }
 
-    /**
-     * Determines the light emission level (0..15) of any held or dropped block/item.
-     * Automatically supports ALL vanilla and modded light-emitting blocks via BlockState.getLightEmission().
-     */
     public static int getItemLuminance(ItemStack stack, boolean submerged) {
         if (stack == null || stack.isEmpty()) {
             return 0;
@@ -126,7 +119,6 @@ public final class DynamicLightTracker {
                 return Math.min(15, emission);
             }
         }
-
         return 0;
     }
 

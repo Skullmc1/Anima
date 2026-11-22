@@ -89,28 +89,28 @@ void main() {
     vec4 color = (UseRgss == 1 ? sampleRGSS(Sampler0, texCoord0, 1.0f / TextureSize) : sampleNearest(Sampler0, texCoord0, 1.0f / TextureSize)) * vertexColor;
 
     if (vAnimaWater > 0.5) {
-        // Ultra-lightweight animated dual-layer ripples + Fresnel sky sheen + wave crest shimmer
-        float t = GameTime * 1400.0;
+        // Bold, crisp animated dual-layer ripples + Fresnel sky reflections + wave-crest sparkles
+        float t = GameTime * 3600.0;
         vec2 wp = vWaterWorldPos.xz;
-        float r1 = sin(wp.x * 3.4 + wp.y * 2.2 + t * 2.8) * cos(wp.x * 2.1 - wp.y * 3.6 + t * 2.1);
-        float r2 = sin(wp.x * 6.2 - wp.y * 5.4 - t * 3.5);
-        float ripple = r1 * 0.65 + r2 * 0.35;
+        float r1 = sin(wp.x * 3.2 + wp.y * 2.1 + t * 3.1) * cos(wp.x * 2.0 - wp.y * 3.5 + t * 2.4);
+        float r2 = sin(wp.x * 5.8 - wp.y * 5.1 - t * 3.8);
+        float r3 = cos(wp.x * 9.0 + wp.y * 7.5 + t * 4.6) * 0.35;
+        float ripple = r1 * 0.55 + r2 * 0.30 + r3 * 0.15;
 
-        // View-angle Schlick Fresnel reflection tint toward sky/horizon FogColor
+        // Visible Fresnel sky/horizon reflection even at normal 45-degree gameplay angles
         vec3 viewDir = normalize(vWaterRelPos);
-        float cosTheta = clamp(abs(viewDir.y) + ripple * 0.06, 0.04, 1.0);
-        float m = 1.0 - cosTheta;
-        float fresnel = 0.06 + 0.68 * (m * m * m * m);
+        float cosTheta = clamp(abs(viewDir.y) + ripple * 0.12, 0.05, 1.0);
+        float fresnel = 0.16 + 0.74 * pow(1.0 - cosTheta, 2.2);
 
-        // Crystal turquoise-teal water body polish + wave-crest highlight
-        vec3 skyTint = FogColor.rgb * 1.08;
-        float crestHighlight = smoothstep(0.015, 0.055, vWaveHeight + ripple * 0.025) * 0.22;
-        float shimmer = smoothstep(0.55, 0.96, ripple) * 0.16;
+        // Crystal turquoise-sapphire water tint + sky reflection + sunlit wave crests & sparkles
+        vec3 waterBase = color.rgb * vec3(0.76, 1.12, 1.16);
+        vec3 skyRefl = FogColor.rgb * 1.15;
+        float crest = smoothstep(0.01, 0.07, vWaveHeight + ripple * 0.03) * 0.32;
+        float sparkle = smoothstep(0.50, 0.92, ripple) * 0.28;
 
-        color.rgb = mix(color.rgb * vec3(0.88, 1.04, 1.08), skyTint, fresnel * 0.68);
-        color.rgb += (skyTint * 0.65 + vec3(0.35)) * (crestHighlight + shimmer);
-        // Slightly clearer water at steep viewing angles, more reflective/opaque at grazing angles
-        color.a = clamp(mix(color.a * 0.84, 0.94, fresnel), 0.45, 0.96);
+        color.rgb = mix(waterBase, skyRefl, fresnel * 0.72);
+        color.rgb += (skyRefl * 0.65 + vec3(0.35)) * (crest + sparkle);
+        color.a = clamp(mix(color.a * 0.78, 0.95, fresnel), 0.42, 0.96);
     }
 
     color = mix(FogColor * vec4(1, 1, 1, color.a), color, ChunkVisibility);
