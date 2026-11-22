@@ -33,15 +33,15 @@ public final class AnimaRendererMain {
         VoxelRenderer renderer = new VoxelRenderer(world, atlas);
         System.out.printf("[Anima-renderer] World & lighting built in %d ms%n", System.currentTimeMillis() - t0);
 
-        // Classic Minecraft first-person gameplay camera overlooking the grassy bank, pond, pier+torch, and hero oak tree
+        // Classic Minecraft first-person gameplay camera overlooking the grassy bank, pond, pier+torch, hero oak tree, and sky/sun
         float camX = 35.5f, camY = 22.4f, camZ = 24.5f;
-        float lookX = 48.5f, lookY = 19.6f, lookZ = 44.0f;
+        float lookX = 50.5f, lookY = 21.8f, lookZ = 44.0f;
         float fov = 68f;
 
         record Scenario(String id, String label, float dayTicks, float rain, boolean holdingTorch) {}
         Scenario[] scenarios = {
                 new Scenario("day", "Midday (5200 ticks)", 5200f, 0f, false),
-                new Scenario("golden", "Golden Hour (11350 ticks)", 11350f, 0f, false),
+                new Scenario("golden", "Golden Hour + Radiant Sun (11050 ticks)", 11050f, 0f, false),
                 new Scenario("night", "Moonlit Night + Offhand Torch (18000 ticks)", 18000f, 0f, true)
         };
 
@@ -141,6 +141,32 @@ public final class AnimaRendererMain {
         Path presetPath = outDir.resolve("presets_sheet.png");
         ImageIO.write(presetSheet, "png", presetPath.toFile());
         System.out.println("[Anima-renderer] Saved presets sheet -> " + presetPath.toAbsolutePath());
+
+        // Dedicated Sun & Wavy Water comparison (camera aimed directly toward the Golden Hour sun over the pond!)
+        AnimaAtmosphere sunAtm = new AnimaAtmosphere(10900f, 0f);
+        float sCamX = 48.0f, sCamY = 21.5f, sCamZ = 22.0f;
+        float sLookX = sCamX + sunAtm.sunDirX * 30f;
+        float sLookY = sCamY + sunAtm.sunDirY * 22f - 2.0f;
+        float sLookZ = sCamZ + sunAtm.sunDirZ * 30f;
+        BufferedImage sunVan = renderer.render(width, height, sCamX, sCamY, sCamZ, sLookX, sLookY, sLookZ, 68f, sunAtm, vanillaCfg, 2.5f);
+        BufferedImage sunAni = renderer.render(width, height, sCamX, sCamY, sCamZ, sLookX, sLookY, sLookZ, 68f, sunAtm, animaCfg, 2.5f);
+
+        BufferedImage sunSheet = new BufferedImage(width * 2 + pad * 3, height + pad * 2 + headerH, BufferedImage.TYPE_INT_RGB);
+        Graphics2D sg = sunSheet.createGraphics();
+        sg.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        sg.setColor(new Color(18, 20, 26));
+        sg.fillRect(0, 0, sunSheet.getWidth(), sunSheet.getHeight());
+        sg.setFont(new Font("SansSerif", Font.BOLD, 20));
+        sg.setColor(new Color(235, 240, 248));
+        sg.drawString("ANIMA v0.6.0 — Radiant Sun & Seamless Wavy Water (Vanilla vs Anima Lush)", pad + 6, 30);
+        sg.drawImage(sunVan, pad, headerH + pad, null);
+        sg.drawImage(sunAni, pad * 2 + width, headerH + pad, null);
+        drawBadge(sg, pad + 14, headerH + pad + 14, "VANILLA — Square Sun & Flat Water", new Color(25, 28, 35, 195), Color.WHITE);
+        drawBadge(sg, pad * 2 + width + 14, headerH + pad + 14, "ANIMA v0.6.0 — Radiant Sun & Seamless Wavy Water", new Color(18, 48, 62, 210), new Color(165, 240, 255));
+        sg.dispose();
+        Path sunPath = outDir.resolve("sun_showcase.png");
+        ImageIO.write(sunSheet, "png", sunPath.toFile());
+        System.out.println("[Anima-renderer] Saved sun showcase -> " + sunPath.toAbsolutePath());
     }
 
     private static void drawBadge(Graphics2D g, int x, int y, String text, Color bg, Color fg) {

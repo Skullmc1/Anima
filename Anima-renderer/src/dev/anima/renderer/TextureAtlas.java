@@ -46,6 +46,7 @@ public final class TextureAtlas {
     private final int[] dandelion = new int[SIZE * SIZE];
     private final int[] torchTex = new int[SIZE * SIZE];
     private final int[] waterStill = new int[SIZE * SIZE];
+    private BufferedImage animaSunImg;
 
     public final boolean loadedRealTextures;
     public final String textureSource;
@@ -74,6 +75,18 @@ public final class TextureAtlas {
             loadDirect(zip, "assets/minecraft/textures/block/dandelion.png", dandelion);
             loadDirect(zip, "assets/minecraft/textures/block/torch.png", torchTex);
             loadDirect(zip, "assets/minecraft/textures/block/water_still.png", waterStill);
+        }
+
+        // Load Anima-mod's actual 256x256 radiant sun.png texture
+        Path[] sunCandidates = {
+                Path.of("..", "Anima-mod", "src", "client", "resources", "resourcepacks", "anima_shaders", "assets", "minecraft", "textures", "environment", "celestial", "sun.png"),
+                Path.of("Anima-mod", "src", "client", "resources", "resourcepacks", "anima_shaders", "assets", "minecraft", "textures", "environment", "celestial", "sun.png")
+        };
+        for (Path sp : sunCandidates) {
+            if (Files.exists(sp)) {
+                animaSunImg = ImageIO.read(sp.toFile());
+                break;
+            }
         }
 
         this.loadedRealTextures = true;
@@ -237,6 +250,24 @@ public final class TextureAtlas {
         outRgb[0] = (((texel >> 16) & 0xFF) / 255f) * tr;
         outRgb[1] = (((texel >> 8) & 0xFF) / 255f) * tg;
         outRgb[2] = ((texel & 0xFF) / 255f) * tb;
+    }
+
+    /**
+     * Samples Anima-mod's actual 256x256 radiant sun.png at UV in [0, 1] (bilinear filtered).
+     */
+    public void sampleAnimaSun(float u, float v, float[] outRgb) {
+        if (animaSunImg == null || u < 0f || u > 1f || v < 0f || v > 1f) {
+            outRgb[0] = 0f; outRgb[1] = 0f; outRgb[2] = 0f;
+            return;
+        }
+        int w = animaSunImg.getWidth();
+        int h = animaSunImg.getHeight();
+        int px = Math.max(0, Math.min(w - 1, (int) (u * w)));
+        int py = Math.max(0, Math.min(h - 1, (int) (v * h)));
+        int argb = animaSunImg.getRGB(px, py);
+        outRgb[0] = ((argb >> 16) & 0xFF) / 255f;
+        outRgb[1] = ((argb >> 8) & 0xFF) / 255f;
+        outRgb[2] = (argb & 0xFF) / 255f;
     }
 
     public static void unpackRgba(int argb, float[] outRgb) {

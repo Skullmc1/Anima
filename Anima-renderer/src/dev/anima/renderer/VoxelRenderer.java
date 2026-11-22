@@ -276,7 +276,7 @@ public final class VoxelRenderer {
             return;
         }
 
-        sampleMc26Sky(dx, dy, dz, atm, config, skyZenith, fogColor, outRgb);
+        sampleMc26Sky(dx, dy, dz, atm, config, skyZenith, fogColor, atlas, outRgb);
         blendMc26Clouds(ox, oy, oz, dx, dy, dz, atm, outRgb);
     }
 
@@ -357,6 +357,7 @@ public final class VoxelRenderer {
             AnimaConfig config,
             float[] skyZenith,
             float[] fogColor,
+            TextureAtlas atlas,
             float[] outRgb) {
 
         float elev = ColorMath.clamp01(dy);
@@ -374,9 +375,38 @@ public final class VoxelRenderer {
             ColorMath.lerpRgb(outRgb, sunsetCol, ColorMath.clamp01(glowBand * strength), outRgb);
         }
 
-        // Classic Minecraft square sun
-        if (atm.dayFactor > 0.08f && sunDot > 0.994f) {
-            outRgb[0] = 1.0f; outRgb[1] = 0.98f; outRgb[2] = 0.88f;
+        // Sun rendering: Vanilla square sun vs Anima's 256x256 radiant sun.png (additive blended just like SkyRenderer!)
+        if (atm.dayFactor > 0.08f && sunDot > 0.85f) {
+            // Build tangent basis around sunDir
+            float sx = atm.sunDirX, sy = atm.sunDirY, sz = atm.sunDirZ;
+            float rx = -sz, rz = sx;
+            float rLen = (float) Math.sqrt(rx * rx + rz * rz);
+            if (rLen < 1e-4f) { rx = 1f; rz = 0f; rLen = 1f; }
+            rx /= rLen; rz /= rLen;
+            float ux = -rz * sy;
+            float uy = rz * sx - rx * sz;
+            float uz = rx * sy;
+
+            float localX = (dx * rx + dz * rz) / Math.max(0.1f, sunDot);
+            float localY = (dx * ux + dy * uy + dz * uz) / Math.max(0.1f, sunDot);
+
+            if (config.isActive() && config.skyEnhancement) {
+                float halfSize = 0.28f; // Minecraft sun quad angular half-size
+                float su = (localX / halfSize) * 0.5f + 0.5f;
+                float sv = (localY / halfSize) * 0.5f + 0.5f;
+                if (su >= 0f && su <= 1f && sv >= 0f && sv <= 1f) {
+                    float[] sunRgb = new float[3];
+                    atlas.sampleAnimaSun(su, sv, sunRgb);
+                    outRgb[0] = ColorMath.clamp01(outRgb[0] + sunRgb[0] * atm.dayFactor);
+                    outRgb[1] = ColorMath.clamp01(outRgb[1] + sunRgb[1] * atm.dayFactor);
+                    outRgb[2] = ColorMath.clamp01(outRgb[2] + sunRgb[2] * atm.dayFactor);
+                }
+            } else {
+                // Classic harsh vanilla square sun
+                if (Math.abs(localX) < 0.065f && Math.abs(localY) < 0.065f) {
+                    outRgb[0] = 1.0f; outRgb[1] = 0.99f; outRgb[2] = 0.90f;
+                }
+            }
         }
 
         // Classic Minecraft moon + stars at night
