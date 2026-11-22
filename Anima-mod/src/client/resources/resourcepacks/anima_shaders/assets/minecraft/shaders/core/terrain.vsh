@@ -17,11 +17,9 @@ out float sphericalVertexDistance;
 out float cylindricalVertexDistance;
 out vec4 vertexColor;
 out vec2 texCoord0;
-out float vAnimaActive;
 out float vAnimaWater;
 out vec3 vWaterWorldPos;
 out vec3 vWaterRelPos;
-out vec3 vBlockLocalPos;
 out float vWaveHeight;
 
 void main() {
@@ -30,8 +28,7 @@ void main() {
 
     const float H = 0.3926990817;
     float modeFrac = fract(FogEnvironmentalEnd);
-    float animaMode = (modeFrac > 0.55) ? 2.0 : ((modeFrac > 0.15) ? 1.0 : 0.0);
-    float animaOn = (animaMode > 0.5) ? 1.0 : 0.0;
+    float animaOn = (modeFrac > 0.15) ? 1.0 : 0.0;
     float isWater = (animaOn > 0.5 && Color.a < 0.998 && Color.a > 0.990) ? 1.0 : 0.0;
     vec4 cleanColor = Color;
     float wave = 0.0;
@@ -46,16 +43,16 @@ void main() {
 #ifdef ALPHA_CUTOUT
     if (animaOn > 0.5) {
         float skyL = float(UV2.y) / 240.0;
-        if (skyL > 0.35 && cleanColor.g > cleanColor.b * 0.92) {
+        if (skyL > 0.35 && cleanColor.g > cleanColor.b * 0.92 && cleanColor.g > cleanColor.r * 1.02) {
             float gust = sin(worldPos.x * (2.0 * H) + worldPos.z * (1.0 * H) + t * 1.9)
                        + cos(worldPos.x * (3.0 * H) - worldPos.z * (2.0 * H) + t * 1.3) * 0.5;
             float swayMask = smoothstep(0.05, 0.90, fract(Position.y));
-            float amp = 0.026 * (0.35 + 0.65 * swayMask);
+            float amp = 0.025 * (0.35 + 0.65 * swayMask);
             pos.x += gust * amp;
             pos.z += cos(worldPos.x * (1.0 * H) + worldPos.z * (3.0 * H) + t * 1.6) * amp * 0.7;
         }
         if (skyL > 0.80 && cleanColor.g > cleanColor.r * 1.05) {
-            sssTint = vec3(1.09, 1.12, 0.96);
+            sssTint = vec3(1.08, 1.11, 0.96);
         }
     }
 #endif
@@ -63,9 +60,9 @@ void main() {
     if (isWater > 0.5) {
         float fy = fract(Position.y);
         float surfaceMask = smoothstep(0.65, 0.86, fy);
-        float w1 = sin(worldPos.x * (3.0 * H) + worldPos.z * (2.0 * H) + t * 2.3) * 0.045;
-        float w2 = cos(worldPos.x * (2.0 * H) - worldPos.z * (4.0 * H) + t * 1.7) * 0.028;
-        float w3 = sin((worldPos.x + worldPos.z) * (5.0 * H) - t * 3.0) * 0.012;
+        float w1 = sin(worldPos.x * (3.0 * H) + worldPos.z * (2.0 * H) + t * 2.4) * 0.048;
+        float w2 = cos(worldPos.x * (2.0 * H) - worldPos.z * (4.0 * H) + t * 1.8) * 0.030;
+        float w3 = sin((worldPos.x + worldPos.z) * (5.0 * H) - t * 3.1) * 0.014;
         wave = (w1 + w2 + w3) * surfaceMask;
         pos.y += wave;
     }
@@ -87,10 +84,8 @@ void main() {
     lit.rgb *= sssTint;
     vertexColor = lit;
     texCoord0 = UV0;
-    vAnimaActive = animaMode;
     vAnimaWater = isWater;
     vWaterWorldPos = worldPos;
     vWaterRelPos = pos;
-    vBlockLocalPos = Position;
     vWaveHeight = wave;
 }

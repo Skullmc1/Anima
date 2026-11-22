@@ -1,0 +1,103 @@
+{
+    "targets": {
+        "bloom_h": {},
+        "bloom_v": {},
+        "swap": {}
+    },
+    "passes": [
+        {
+            "vertex_shader": "minecraft:core/screenquad",
+            "fragment_shader": "anima:post/lush_bloom",
+            "inputs": [
+                {
+                    "sampler_name": "In",
+                    "target": "minecraft:main",
+                    "bilinear": true
+                }
+            ],
+            "output": "bloom_h",
+            "uniforms": {
+                "BloomDir": [
+                    {
+                        "name": "Dir",
+                        "type": "vec2",
+                        "value": [ 1.0, 0.0 ]
+                    },
+                    {
+                        "name": "Extract",
+                        "type": "float",
+                        "value": 1.0
+                    }
+                ]
+            }
+        },
+        {
+            "vertex_shader": "minecraft:core/screenquad",
+            "fragment_shader": "anima:post/lush_bloom",
+            "inputs": [
+                {
+                    "sampler_name": "In",
+                    "target": "bloom_h",
+                    "bilinear": true
+                }
+            ],
+            "output": "bloom_v",
+            "uniforms": {
+                "BloomDir": [
+                    {
+                        "name": "Dir",
+                        "type": "vec2",
+                        "value": [ 0.0, 1.0 ]
+                    },
+                    {
+                        "name": "Extract",
+                        "type": "float",
+                        "value": 0.0
+                    }
+                ]
+            }
+        },
+        {
+            "vertex_shader": "minecraft:core/screenquad",
+            "fragment_shader": "anima:post/lush_final",
+            "inputs": [
+                {
+                    "sampler_name": "In",
+                    "target": "minecraft:main",
+                    "bilinear": true
+                },
+                {
+                    "sampler_name": "Bloom",
+                    "target": "bloom_v",
+                    "bilinear": true
+                },
+                {
+                    "sampler_name": "InDepth",
+                    "target": "minecraft:main",
+                    "use_depth_buffer": true
+                }
+            ],
+            "output": "swap"
+        },
+        {
+            "vertex_shader": "minecraft:core/screenquad",
+            "fragment_shader": "minecraft:post/blit",
+            "inputs": [
+                {
+                    "sampler_name": "In",
+                    "target": "swap"
+                }
+            ],
+            "output": "minecraft:main",
+            "uniforms": {
+                "BlitConfig": [
+                    {
+                        "name": "ColorModulate",
+                        "type": "vec4",
+                        "value": [ 1.0, 1.0, 1.0, 1.0 ]
+                    }
+                ]
+            }
+        }
+    ]
+}

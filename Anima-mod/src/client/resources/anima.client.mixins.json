@@ -13,6 +13,7 @@
 		"EntityLightMixin",
 		"ItemInHandLightMixin",
 		"FluidRendererMixin",
+		"GameRendererMixin",
 		"PauseScreenMixin"
 	],
 	"injectors": {

@@ -82,9 +82,11 @@ public final class VoxelRenderer {
         final float fUx = ux, fUy = uy, fUz = uz;
 
         int[] pixels = new int[width * height];
+        float[] depthBuf = new float[width * height];
 
         IntStream.range(0, height).parallel().forEach(py -> {
             float[] rgb = new float[3];
+            float[] hitDepth = new float[1];
             float ndcY = 1f - 2f * ((py + 0.5f) / height);
             for (int px = 0; px < width; px++) {
                 float ndcX = 2f * ((px + 0.5f) / width) - 1f;
@@ -94,21 +96,29 @@ public final class VoxelRenderer {
                 float dLen = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
                 dx /= dLen; dy /= dLen; dz /= dLen;
 
-                tracePrimaryRay(camX, camY, camZ, dx, dy, dz, atm, config, timeSeconds, lmUniforms, lightmap, fogColor, skyZenith, rgb);
-                pixels[py * width + px] = ColorMath.packRgb(rgb[0], rgb[1], rgb[2]);
+                hitDepth[0] = 256.0f;
+                tracePrimaryRay(camX, camY, camZ, dx, dy, dz, atm, config, timeSeconds, lmUniforms, lightmap, fogColor, skyZenith, rgb, hitDepth);
+                int idx = py * width + px;
+                pixels[idx] = ColorMath.packRgb(rgb[0], rgb[1], rgb[2]);
+                depthBuf[idx] = hitDepth[0];
             }
         });
 
         img.setRGB(0, 0, width, height, pixels, 0, width);
 
-        // If Borderlands cel-shaded mode is active, apply exact cel bands + punchy saturation + comic ink outlines
+        // Apply exact v1.0.0 fullscreen PostChain effects: anima:borderlands or anima:lush!
         if (config.isBorderlands()) {
-            applyBorderlandsPostPass(img);
+            applyBorderlandsDepthPostPass(img, depthBuf);
+        } else if (config.isActive()) {
+            applyLushBloomPostPass(img);
         }
         return img;
     }
 
-    private static void applyBorderlandsPostPass(BufferedImage img) {
+    /**
+     * Exact mirror of anima:post/borderlands (Miasma 12-tap Laplacian depth silhouette outlines + cloud outlines + clean 1.14x cel-shading).
+     */
+    private static void applyBorderlandsDepthPostPass(BufferedImage img, float[] depthBuf) {
         int w = img.getWidth();
         int h = img.getHeight();
         int[] src = img.getRGB(0, 0, w, h, null, 0, w);
@@ -122,6 +132,12 @@ public final class VoxelRenderer {
             lumBuf[i] = 0.2126f * r + 0.7152f * g + 0.0722f * b;
         }
 
+        int[][] offsets = {
+                {1,0}, {-1,1}, {0,1}, {1,1},
+                {-2,2}, {-1,2}, {0,2}, {1,2}, {2,2},
+                {-2,1}, {2,1}, {2,0}
+        };
+
         IntStream.range(0, h).parallel().forEach(y -> {
             for (int x = 0; x < w; x++) {
                 int idx = y * w + x;
@@ -129,40 +145,118 @@ public final class VoxelRenderer {
                 float g = ((src[idx] >> 8) & 0xFF) / 255f;
                 float b = (src[idx] & 0xFF) / 255f;
                 float lum = lumBuf[idx];
+                float z0 = depthBuf[idx];
 
-                // 1. Punchy Borderlands saturation (1.42x)
-                float sr = ColorMath.clamp01(lum + (r - lum) * 1.42f);
-                float sg = ColorMath.clamp01(lum + (g - lum) * 1.42f);
-                float sb = ColorMath.clamp01(lum + (b - lum) * 1.42f);
+                float sr = ColorMath.clamp01(lum + (r - lum) * 1.14f);
+                float sg = ColorMath.clamp01(lum + (g - lum) * 1.14f);
+                float sb = ColorMath.clamp01(lum + (b - lum) * 1.14f);
 
-                // 2. Stepped cel-shading bands (4.5 bands)
-                float bands = 4.5f;
-                float scaled = lum * bands;
-                float baseBand = (float) Math.floor(scaled);
-                float frac = ColorMath.smoothstep(0.38f, 0.62f, scaled - baseBand);
-                float celLum = ColorMath.clamp((baseBand + frac + 0.15f) / (bands + 0.15f), 0.05f, 1.0f);
-                float mul = celLum / Math.max(0.04f, lum);
-                float cr = ColorMath.clamp01(sr * mul);
-                float cg = ColorMath.clamp01(sg * mul);
-                float cb = ColorMath.clamp01(sb * mul);
-                cr = ColorMath.lerp(cr, cr * cr * 1.18f, 0.25f);
-                cg = ColorMath.lerp(cg, cg * cg * 1.18f, 0.25f);
-                cb = ColorMath.lerp(cb, cb * cb * 1.18f, 0.25f);
+                float cr = sr, cg = sg, cb = sb;
+                if (z0 < 250f) {
+                    float bands = 5.0f;
+                    float scaled = lum * bands;
+                    float baseBand = (float) Math.floor(scaled);
+                    float frac = ColorMath.smoothstep(0.35f, 0.65f, scaled - baseBand);
+                    float celLum = ColorMath.clamp((baseBand + frac + 0.16f) / (bands + 0.16f), 0.05f, 1.0f);
+                    float mul = celLum / Math.max(0.035f, lum);
+                    cr = ColorMath.clamp01(sr * mul);
+                    cg = ColorMath.clamp01(sg * mul);
+                    cb = ColorMath.clamp01(sb * mul);
+                }
 
-                // 3. Sobel comic ink outlines
-                int xm = Math.max(0, x - 1), xp = Math.min(w - 1, x + 1);
-                int ym = Math.max(0, y - 1), yp = Math.min(h - 1, y + 1);
-                float gx = -lumBuf[ym * w + xm] - 2f * lumBuf[y * w + xm] - lumBuf[yp * w + xm]
-                         +  lumBuf[ym * w + xp] + 2f * lumBuf[y * w + xp] + lumBuf[yp * w + xp];
-                float gy = -lumBuf[ym * w + xm] - 2f * lumBuf[ym * w + x] - lumBuf[ym * w + xp]
-                         +  lumBuf[yp * w + xm] + 2f * lumBuf[yp * w + x] + lumBuf[yp * w + xp];
-                float edge = (float) Math.sqrt(gx * gx + gy * gy);
-                float outline = ColorMath.smoothstep(0.24f, 0.58f, edge) * 0.88f;
+                // Exact Miasma 12-tap Laplacian depth silhouette outline (zero grid on flat sand/water!)
+                float outlineFactor = 1.0f;
+                float zScaled = z0 * 2.0f;
+                for (int[] off : offsets) {
+                    int x1 = Math.max(0, Math.min(w - 1, x + off[0]));
+                    int y1 = Math.max(0, Math.min(h - 1, y + off[1]));
+                    int x2 = Math.max(0, Math.min(w - 1, x - off[0]));
+                    int y2 = Math.max(0, Math.min(h - 1, y - off[1]));
+                    float diff = zScaled - (depthBuf[y1 * w + x1] + depthBuf[y2 * w + x2]);
+                    outlineFactor *= ColorMath.clamp01(1.0f - Math.max(0f, diff - 0.18f) * 1.15f);
+                }
+                float depthInk = (1.0f - outlineFactor) * (1.0f - ColorMath.smoothstep(140f, 250f, z0));
 
-                cr = ColorMath.lerp(cr, 0.06f, outline);
-                cg = ColorMath.lerp(cg, 0.05f, outline);
-                cb = ColorMath.lerp(cb, 0.08f, outline);
+                // Cloud silhouette outlines on sky pixels
+                float cloudInk = 0f;
+                if (z0 >= 250f) {
+                    int xm = Math.max(0, x - 1), xp = Math.min(w - 1, x + 1);
+                    int ym = Math.max(0, y - 1), yp = Math.min(h - 1, y + 1);
+                    float grad = Math.abs(lumBuf[y * w + xp] - lumBuf[y * w + xm])
+                               + Math.abs(lumBuf[yp * w + x] - lumBuf[ym * w + x]);
+                    cloudInk = ColorMath.smoothstep(0.075f, 0.19f, grad) * 0.62f;
+                }
+
+                float ink = ColorMath.clamp(Math.max(depthInk, cloudInk), 0f, 0.90f);
+                cr = ColorMath.lerp(cr, 0.04f, ink);
+                cg = ColorMath.lerp(cg, 0.035f, ink);
+                cb = ColorMath.lerp(cb, 0.055f, ink);
                 dst[idx] = ColorMath.packRgb(cr, cg, cb);
+            }
+        });
+        img.setRGB(0, 0, w, h, dst, 0, w);
+    }
+
+    /**
+     * Exact mirror of anima:post/lush (fullscreen bright-pass Bloom + warm/cool grading + ACES tonemap + gentle vignette).
+     */
+    private static void applyLushBloomPostPass(BufferedImage img) {
+        int w = img.getWidth(), h = img.getHeight();
+        int[] src = img.getRGB(0, 0, w, h, null, 0, w);
+        float[] b1 = new float[w * h * 3];
+        float[] b2 = new float[w * h * 3];
+
+        for (int i = 0; i < src.length; i++) {
+            float r = ((src[i] >> 16) & 0xFF) / 255f;
+            float g = ((src[i] >> 8) & 0xFF) / 255f;
+            float b = (src[i] & 0xFF) / 255f;
+            float l = 0.2126f * r + 0.7152f * g + 0.0722f * b;
+            float mask = ColorMath.smoothstep(0.68f, 1.0f, l);
+            b1[i * 3] = r * mask; b1[i * 3 + 1] = g * mask; b1[i * 3 + 2] = b * mask;
+        }
+        float[] weights = {0.227027f, 0.1945946f, 0.1216216f, 0.054054f, 0.016216f};
+        IntStream.range(0, h).parallel().forEach(y -> {
+            for (int x = 0; x < w; x++) {
+                float sr = b1[(y * w + x) * 3] * weights[0];
+                float sg = b1[(y * w + x) * 3 + 1] * weights[0];
+                float sb = b1[(y * w + x) * 3 + 2] * weights[0];
+                for (int k = 1; k < 5; k++) {
+                    int x1 = Math.min(w - 1, x + k * 2), x2 = Math.max(0, x - k * 2);
+                    sr += (b1[(y * w + x1) * 3] + b1[(y * w + x2) * 3]) * weights[k];
+                    sg += (b1[(y * w + x1) * 3 + 1] + b1[(y * w + x2) * 3 + 1]) * weights[k];
+                    sb += (b1[(y * w + x1) * 3 + 2] + b1[(y * w + x2) * 3 + 2]) * weights[k];
+                }
+                int di = (y * w + x) * 3;
+                b2[di] = sr; b2[di + 1] = sg; b2[di + 2] = sb;
+            }
+        });
+        int[] dst = new int[w * h];
+        IntStream.range(0, h).parallel().forEach(y -> {
+            for (int x = 0; x < w; x++) {
+                float br = b2[(y * w + x) * 3] * weights[0];
+                float bg = b2[(y * w + x) * 3 + 1] * weights[0];
+                float bb = b2[(y * w + x) * 3 + 2] * weights[0];
+                for (int k = 1; k < 5; k++) {
+                    int y1 = Math.min(h - 1, y + k * 2), y2 = Math.max(0, y - k * 2);
+                    br += (b2[(y1 * w + x) * 3] + b2[(y2 * w + x) * 3]) * weights[k];
+                    bg += (b2[(y1 * w + x) * 3 + 1] + b2[(y2 * w + x) * 3 + 1]) * weights[k];
+                    bb += (b2[(y1 * w + x) * 3 + 2] + b2[(y2 * w + x) * 3 + 2]) * weights[k];
+                }
+                int idx = y * w + x;
+                float r = ((src[idx] >> 16) & 0xFF) / 255f + br * 0.42f;
+                float g = ((src[idx] >> 8) & 0xFF) / 255f + bg * 0.39f;
+                float b = (src[idx] & 0xFF) / 255f + bb * 0.34f;
+                float lum = 0.2126f * r + 0.7152f * g + 0.0722f * b;
+                float ht = ColorMath.smoothstep(0.15f, 0.78f, lum);
+                r *= ColorMath.lerp(0.92f, 1.06f, ht);
+                g *= ColorMath.lerp(0.96f, 1.01f, ht);
+                b *= ColorMath.lerp(1.08f, 0.94f, ht);
+                r = ColorMath.lerp(r, ColorMath.filmicCurve(r * 1.18f), 0.58f);
+                g = ColorMath.lerp(g, ColorMath.filmicCurve(g * 1.18f), 0.58f);
+                b = ColorMath.lerp(b, ColorMath.filmicCurve(b * 1.18f), 0.58f);
+                float[] rgb = {r, g, b};
+                ColorMath.adjustSaturation(rgb, 1.15f);
+                dst[idx] = ColorMath.packRgb(rgb[0], rgb[1], rgb[2]);
             }
         });
         img.setRGB(0, 0, w, h, dst, 0, w);
@@ -178,7 +272,8 @@ public final class VoxelRenderer {
             float[][] lightmap,
             float[] fogColor,
             float[] skyZenith,
-            float[] outRgb) {
+            float[] outRgb,
+            float[] outDepth) {
 
         float maxDist = 92f;
         int vx = (int) Math.floor(ox);
@@ -235,6 +330,7 @@ public final class VoxelRenderer {
                     if (plantT >= 0f) {
                         shadeCrossPlant(vx, vy, vz, block, plantRgb, config, lightmap, outRgb);
                         applyMc26Fog(plantT, atm, config, fogColor, outRgb);
+                        outDepth[0] = plantT;
                         return;
                     }
                 } else if (block.solid) {
@@ -303,18 +399,14 @@ public final class VoxelRenderer {
                             outRgb[0] = ColorMath.lerp(surfaceRgb[0], wr, waterAlpha);
                             outRgb[1] = ColorMath.lerp(surfaceRgb[1], wg, waterAlpha);
                             outRgb[2] = ColorMath.lerp(surfaceRgb[2], wb, waterAlpha);
-                            if (config.isActive()) {
-                                applyAnimaFilmicGrade(outRgb);
-                            }
                             applyMc26Fog(waterHitT, atm, config, fogColor, outRgb);
+                            outDepth[0] = waterHitT;
                         } else {
                             outRgb[0] = surfaceRgb[0];
                             outRgb[1] = surfaceRgb[1];
                             outRgb[2] = surfaceRgb[2];
-                            if (config.isActive()) {
-                                applyAnimaFilmicGrade(outRgb);
-                            }
                             applyMc26Fog(t, atm, config, fogColor, outRgb);
+                            outDepth[0] = t;
                         }
                         return;
                     }

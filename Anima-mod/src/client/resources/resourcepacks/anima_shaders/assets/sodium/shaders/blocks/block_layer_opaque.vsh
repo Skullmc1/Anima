@@ -12,11 +12,9 @@ out vec2 v_FragDistance;
 out float fadeFactor;
 #endif
 
-out float v_AnimaActive;
 out float v_AnimaWater;
 out vec3 v_WaterRelPos;
 out vec2 v_WaterPhaseCoord;
-out vec3 v_BlockLocalPos;
 out float v_WaveHeight;
 out float v_WaterTime;
 
@@ -52,43 +50,41 @@ void main() {
     vec3 position = _vert_position + translation;
 
     float animaTime = float(u_CurrentTime & 1048575) * 0.001;
-    const float H = 0.3926990817; // 2*PI / 16.0 -> seamless across all chunks & regions
+    const float H = 0.3926990817; // 2*PI / 16.0 -> seamless across all chunks & Sodium regions
 
     float modeFrac = fract(u_EnvironmentFog.y);
-    float animaMode = (modeFrac > 0.55) ? 2.0 : ((modeFrac > 0.15) ? 1.0 : 0.0);
-    float animaOn = (animaMode > 0.5) ? 1.0 : 0.0;
+    float animaOn = (modeFrac > 0.15) ? 1.0 : 0.0;
     vec2 phaseCoord = _vert_position.xz + drawTrans.xz;
     float fy = fract(_vert_position.y);
     float wave = 0.0;
-    float isWaterCandidate = 0.0;
 
-    // 1. Zero-Cost Wind-Swaying Foliage & Sunlit Subsurface Glow (Leaves, Tall Grass, Flowers)
+    // 1. Seamless Complementary-Style Animated Wavy Water (NOT inside #else so Sodium translucent pass ALWAYS runs it!)
+    float isWaterCandidate = (animaOn > 0.5 && fy > 0.12 && fy < 0.96 && _vert_color.b > _vert_color.r * 1.12) ? 1.0 : 0.0;
+    if (isWaterCandidate > 0.5) {
+        float surfaceMask = smoothstep(0.65, 0.86, fy);
+        float w1 = sin(phaseCoord.x * (3.0 * H) + phaseCoord.y * (2.0 * H) + animaTime * 2.4) * 0.048;
+        float w2 = cos(phaseCoord.x * (2.0 * H) - phaseCoord.y * (4.0 * H) + animaTime * 1.8) * 0.030;
+        float w3 = sin((phaseCoord.x + phaseCoord.y) * (5.0 * H) - animaTime * 3.1) * 0.014;
+        wave = (w1 + w2 + w3) * surfaceMask;
+        position.y += wave;
+    }
+
+    // 2. Zero-Cost Wind-Swaying Foliage & Sunlit Subsurface Glow (Leaves, Tall Grass, Flowers)
     vec3 sssTint = vec3(1.0);
 #ifdef ALPHA_CUTOUT
-    if (animaOn > 0.5) {
+    if (animaOn > 0.5 && isWaterCandidate < 0.5) {
         float skyL = _vert_tex_light_coord.y;
-        if (skyL > 0.35 && _vert_color.g > _vert_color.b * 0.92) {
+        if (skyL > 0.35 && _vert_color.g > _vert_color.b * 0.92 && _vert_color.g > _vert_color.r * 1.02) {
             float gust = sin(phaseCoord.x * (2.0 * H) + phaseCoord.y * (1.0 * H) + animaTime * 1.9)
                        + cos(phaseCoord.x * (3.0 * H) - phaseCoord.y * (2.0 * H) + animaTime * 1.3) * 0.5;
             float swayMask = smoothstep(0.05, 0.90, fy);
-            float amp = 0.026 * (0.35 + 0.65 * swayMask);
+            float amp = 0.025 * (0.35 + 0.65 * swayMask);
             position.x += gust * amp;
             position.z += cos(phaseCoord.x * (1.0 * H) + phaseCoord.y * (3.0 * H) + animaTime * 1.6) * amp * 0.7;
         }
         if (skyL > 0.80 && _vert_color.g > _vert_color.r * 1.05) {
-            sssTint = vec3(1.09, 1.12, 0.96);
+            sssTint = vec3(1.08, 1.11, 0.96);
         }
-    }
-#else
-    // 2. Seamless Complementary-Style Animated Wavy Water (only on translucent water pass!)
-    isWaterCandidate = (animaOn > 0.5 && fy > 0.12 && fy < 0.96 && _vert_color.b > _vert_color.r * 1.12) ? 1.0 : 0.0;
-    if (isWaterCandidate > 0.5) {
-        float surfaceMask = smoothstep(0.65, 0.86, fy);
-        float w1 = sin(phaseCoord.x * (3.0 * H) + phaseCoord.y * (2.0 * H) + animaTime * 2.3) * 0.045;
-        float w2 = cos(phaseCoord.x * (2.0 * H) - phaseCoord.y * (4.0 * H) + animaTime * 1.7) * 0.028;
-        float w3 = sin((phaseCoord.x + phaseCoord.y) * (5.0 * H) - animaTime * 3.0) * 0.012;
-        wave = (w1 + w2 + w3) * surfaceMask;
-        position.y += wave;
     }
 #endif
 
@@ -117,11 +113,9 @@ void main() {
     lit.rgb *= sssTint;
     v_Color = lit;
     v_TexCoord = (_vert_tex_diffuse_coord_bias * u_TexCoordShrink) + _vert_tex_diffuse_coord;
-    v_AnimaActive = animaMode;
     v_AnimaWater = isWaterCandidate;
     v_WaterRelPos = position;
     v_WaterPhaseCoord = phaseCoord;
-    v_BlockLocalPos = _vert_position;
     v_WaveHeight = wave;
     v_WaterTime = animaTime;
 }

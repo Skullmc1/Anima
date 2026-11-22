@@ -10,11 +10,9 @@ in float sphericalVertexDistance;
 in float cylindricalVertexDistance;
 in vec4 vertexColor;
 in vec2 texCoord0;
-in float vAnimaActive;
 in float vAnimaWater;
 in vec3 vWaterWorldPos;
 in vec3 vWaterRelPos;
-in vec3 vBlockLocalPos;
 in float vWaveHeight;
 
 out vec4 fragColor;
@@ -87,55 +85,17 @@ vec4 sampleRGSS(sampler2D source, vec2 uv, vec2 pixelSize) {
     return mix(nearestColor, rgssColor, blendFactor);
 }
 
-vec3 animaFilmicGrade(vec3 c) {
-    vec3 x = max(vec3(0.0), c * 1.12);
-    vec3 mapped = clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
-    vec3 graded = mix(c, mapped, 0.42);
-    float lum = dot(graded, vec3(0.2126, 0.7152, 0.0722));
-    return clamp(mix(vec3(lum), graded, 1.12), 0.0, 1.0);
-}
-
-vec3 animaBorderlandsGrade(vec3 c, vec3 relPos, vec3 localPos) {
-    float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
-    vec3 sat = clamp(mix(vec3(lum), c, 1.16), 0.0, 1.0);
-
-    float bands = 4.5;
-    float scaled = lum * bands;
-    float baseBand = floor(scaled);
-    float frac = smoothstep(0.36, 0.64, fract(scaled));
-    float celLum = clamp((baseBand + frac + 0.18) / (bands + 0.18), 0.06, 1.0);
-    vec3 cel = clamp(sat * (celLum / max(0.04, lum)), 0.0, 1.0);
-
-    float dist = length(relPos);
-    vec3 fw = fwidth(localPos);
-    vec3 fp = fract(localPos);
-    vec3 distToBorder = min(fp, 1.0 - fp);
-
-    float pxX = (fw.x > 0.0004) ? (distToBorder.x / fw.x) : 99.0;
-    float pxY = (fw.y > 0.0004) ? (distToBorder.y / fw.y) : 99.0;
-    float pxZ = (fw.z > 0.0004) ? (distToBorder.z / fw.z) : 99.0;
-    float minPxEdge = min(pxX, min(pxY, pxZ));
-
-    float distFade = 1.0 - smoothstep(18.0, 48.0, dist);
-    float blockOutline = (1.0 - smoothstep(0.55, 1.45, minPxEdge)) * 0.85 * distFade;
-    float texInk = smoothstep(0.14, 0.34, fwidth(lum)) * 0.42 * distFade;
-    float ink = clamp(max(blockOutline, texInk), 0.0, 0.88);
-
-    vec3 inkColor = vec3(0.06, 0.05, 0.08);
-    return mix(cel, inkColor, ink);
-}
-
 vec3 complementaryWaterNormal(vec2 wp, float t) {
     const float H = 0.3926990817;
-    float b1 = cos(wp.x * (2.0 * H) + wp.y * (1.0 * H) - t * 0.9);
-    float b2 = sin(wp.x * (1.0 * H) - wp.y * (3.0 * H) - t * 0.7);
-    float m1 = cos(wp.x * (6.0 * H) + wp.y * (4.0 * H) + t * 2.2);
-    float m2 = sin(wp.x * (4.0 * H) - wp.y * (7.0 * H) + t * 1.8);
-    float s1 = cos(wp.x * (14.0 * H) - wp.y * (11.0 * H) - t * 3.6);
-    float s2 = sin(wp.x * (11.0 * H) + wp.y * (15.0 * H) - t * 3.1);
+    float b1 = cos(wp.x * (2.0 * H) + wp.y * (1.0 * H) - t * 1.1);
+    float b2 = sin(wp.x * (1.0 * H) - wp.y * (3.0 * H) - t * 0.9);
+    float m1 = cos(wp.x * (6.0 * H) + wp.y * (4.0 * H) + t * 2.5);
+    float m2 = sin(wp.x * (4.0 * H) - wp.y * (7.0 * H) + t * 2.1);
+    float s1 = cos(wp.x * (14.0 * H) - wp.y * (11.0 * H) - t * 4.0);
+    float s2 = sin(wp.x * (11.0 * H) + wp.y * (15.0 * H) - t * 3.5);
 
-    float nx = b1 * 0.055 + m1 * 0.075 + s1 * 0.045;
-    float nz = b2 * 0.055 + m2 * 0.075 + s2 * 0.045;
+    float nx = b1 * 0.065 + m1 * 0.085 + s1 * 0.050;
+    float nz = b2 * 0.065 + m2 * 0.085 + s2 * 0.050;
     return normalize(vec3(nx, 1.0, nz));
 }
 
@@ -148,28 +108,22 @@ void main() {
         vec3 R = reflect(viewDir, N);
 
         float ndotv = clamp(dot(-viewDir, N), 0.02, 1.0);
-        float fresnel = 0.06 + 0.82 * pow(1.0 - ndotv, 3.6);
+        float fresnel = 0.08 + 0.82 * pow(1.0 - ndotv, 3.2);
 
-        vec3 horizonCol = FogColor.rgb * 1.12;
-        vec3 zenithCol = FogColor.rgb * vec3(0.42, 0.64, 1.12);
+        vec3 horizonCol = FogColor.rgb * 1.14;
+        vec3 zenithCol = FogColor.rgb * vec3(0.42, 0.66, 1.14);
         vec3 skyRefl = mix(horizonCol, zenithCol, clamp(R.y * 1.35, 0.0, 1.0));
 
         vec3 sunDir = normalize(vec3(0.45, 0.52, 0.72));
-        float specSharp = pow(max(0.0, dot(R, sunDir)), 42.0) * 0.95;
-        float specBroad = pow(max(0.0, dot(R, normalize(vec3(-0.35, 0.65, 0.67)))), 18.0) * 0.25;
+        float specSharp = pow(max(0.0, dot(R, sunDir)), 36.0) * 1.10;
+        float specBroad = pow(max(0.0, dot(R, normalize(vec3(-0.35, 0.65, 0.67)))), 16.0) * 0.30;
         float skyBright = clamp(dot(FogColor.rgb, vec3(0.333)) * 1.8, 0.08, 1.0);
         vec3 specCol = (horizonCol * 0.65 + vec3(0.35)) * (specSharp + specBroad) * skyBright;
 
-        vec3 waterBody = pow(max(color.rgb, vec3(0.0)), vec3(1.18)) * vec3(0.50, 1.02, 1.16);
+        vec3 waterBody = pow(max(color.rgb, vec3(0.0)), vec3(1.16)) * vec3(0.48, 1.02, 1.16);
 
         color.rgb = mix(waterBody, skyRefl, fresnel * 0.84) + specCol;
         color.a = clamp(mix(0.46, 0.92, fresnel), 0.42, 0.94);
-    }
-
-    if (vAnimaActive > 1.5) {
-        color.rgb = animaBorderlandsGrade(color.rgb, vWaterRelPos, vBlockLocalPos);
-    } else if (vAnimaActive > 0.5) {
-        color.rgb = animaFilmicGrade(color.rgb);
     }
 
     color = mix(FogColor * vec4(1, 1, 1, color.a), color, ChunkVisibility);
