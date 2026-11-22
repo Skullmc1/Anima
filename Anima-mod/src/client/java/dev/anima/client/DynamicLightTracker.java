@@ -65,8 +65,8 @@ public final class DynamicLightTracker {
             return;
         }
 
-        // Potato preset updates every 1.15 blocks for maximum FPS; Balanced/Lush every 0.65 blocks for silky movement
-        double moveThreshold = (cfg.preset == AnimaConfig.Preset.POTATO) ? 1.15 : 0.65;
+        // Potato preset updates every 0.85 blocks for maximum FPS; Balanced/Lush every 0.45 blocks for smooth movement
+        double moveThreshold = (cfg.preset == AnimaConfig.Preset.POTATO) ? 0.85 : 0.45;
         boolean movedEnough = Double.isNaN(lastUpdateX)
                 || distSq(px, py, pz, lastUpdateX, lastUpdateY, lastUpdateZ) >= moveThreshold * moveThreshold;
         boolean lumChanged = currentLum != lastLuminance;

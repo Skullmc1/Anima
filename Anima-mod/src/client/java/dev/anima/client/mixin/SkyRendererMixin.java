@@ -30,22 +30,22 @@ public class SkyRendererMixin {
 
         float[] vSky = new float[3];
         ColorMath.unpackRgb(state.skyColor, vSky);
-        float r = ColorMath.lerp(vSky[0], atm.zenithColor[0], 0.62f);
-        float g = ColorMath.lerp(vSky[1], atm.zenithColor[1], 0.62f);
-        float b = ColorMath.lerp(vSky[2], atm.zenithColor[2], 0.62f);
+        float r = ColorMath.lerp(vSky[0], atm.zenithColor[0], 0.84f);
+        float g = ColorMath.lerp(vSky[1], atm.zenithColor[1], 0.84f);
+        float b = ColorMath.lerp(vSky[2], atm.zenithColor[2], 0.84f);
         state.skyColor = ColorMath.packRgb(r, g, b);
 
-        if (atm.goldenHourFactor > 0.05f) {
+        if (atm.goldenHourFactor > 0.04f) {
             state.sunriseAndSunsetColor = ColorMath.packArgb(
-                    Math.min(1f, atm.goldenHourFactor * 0.92f),
+                    Math.min(1f, atm.goldenHourFactor * 0.96f),
                     atm.horizonColor[0],
                     atm.horizonColor[1],
                     atm.horizonColor[2]
             );
         }
 
-        if (atm.nightFactor > 0.1f) {
-            state.starBrightness = Math.min(1.0f, state.starBrightness * 1.35f + 0.12f * atm.nightFactor);
+        if (atm.nightFactor > 0.08f) {
+            state.starBrightness = Math.min(1.0f, state.starBrightness * 1.45f + 0.18f * atm.nightFactor);
         }
     }
 }

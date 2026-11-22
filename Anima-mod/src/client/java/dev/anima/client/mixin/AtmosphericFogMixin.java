@@ -35,7 +35,7 @@ public class AtmosphericFogMixin {
         float[] vRgb = new float[3];
         ColorMath.unpackRgb(vanillaColor, vRgb);
 
-        float blend = 0.55f * cfg.fogDensity;
+        float blend = ColorMath.clamp01(0.75f * cfg.fogDensity + 0.15f * atm.goldenHourFactor);
         float r = ColorMath.lerp(vRgb[0], atm.fogColor[0], blend);
         float g = ColorMath.lerp(vRgb[1], atm.fogColor[1], blend);
         float b = ColorMath.lerp(vRgb[2], atm.fogColor[2], blend);
@@ -51,6 +51,7 @@ public class AtmosphericFogMixin {
         AnimaAtmosphere atm = AnimaClientMod.atmosphere();
         float startMult = AnimaFogEngine.fogStartMultiplier(atm, cfg);
         fogData.renderDistanceStart = Math.min(fogData.renderDistanceStart, renderDistance * startMult);
-        fogData.environmentalStart = Math.min(fogData.environmentalStart, renderDistance * (startMult + 0.12f));
+        fogData.environmentalStart = Math.min(fogData.environmentalStart, renderDistance * (startMult * 0.85f));
+        fogData.environmentalEnd = Math.min(fogData.environmentalEnd, renderDistance * (1.05f - 0.15f * atm.goldenHourFactor));
     }
 }

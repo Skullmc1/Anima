@@ -14,9 +14,9 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
 
 /**
- * Injects Anima's atmospheric lightmap colors (warm golden-hour sunlight, cool sky-bounce
- * ambient shadows, silver-blue moonlight, and warm flickering torchlight) directly into
- * Minecraft 26.2's LightmapRenderState — zero custom GPU shaders required.
+ * Injects Anima's shader-free atmospheric lightmap directly into Minecraft 26.2's
+ * LightmapRenderState: warm golden-white sunlight, deep cool-blue atmospheric shadow
+ * contrast, silver-blue moonlight, and rich incandescent 2600K torchlight.
  */
 @Mixin(LightmapRenderStateExtractor.class)
 public class LightmapExtractorMixin {
@@ -31,30 +31,39 @@ public class LightmapExtractorMixin {
         AnimaAtmosphere atm = AnimaClientMod.atmosphere();
         float t = AnimaClientMod.elapsedSeconds();
 
-        // Warm golden-hour / crisp midday sky light tint
+        // 1. Rich warm sunlight at midday, blazing amber-gold at golden hour, cool silver-blue at night
         float warmth = cfg.warmthStrength;
-        float skyR = ColorMath.lerp(state.skyLightColor.x(), atm.sunColor[0], 0.55f * warmth);
-        float skyG = ColorMath.lerp(state.skyLightColor.y(), atm.sunColor[1], 0.55f * warmth);
-        float skyB = ColorMath.lerp(state.skyLightColor.z(), atm.sunColor[2], 0.55f * warmth);
-        state.skyLightColor = new Vector3f(skyR, skyG, skyB);
+        float skyR = ColorMath.lerp(0.46f, ColorMath.lerp(1.14f, 1.24f, atm.goldenHourFactor), atm.dayFactor);
+        float skyG = ColorMath.lerp(0.64f, ColorMath.lerp(1.03f, 0.72f, atm.goldenHourFactor), atm.dayFactor);
+        float skyB = ColorMath.lerp(1.04f, ColorMath.lerp(0.86f, 0.36f, atm.goldenHourFactor), atm.dayFactor);
 
-        // Cool atmospheric shadow fill instead of muddy gray
-        float ambR = ColorMath.lerp(state.ambientColor.x(), atm.shadowTintColor[0] * 0.28f, 0.65f * cfg.shadowDepth);
-        float ambG = ColorMath.lerp(state.ambientColor.y(), atm.shadowTintColor[1] * 0.28f, 0.65f * cfg.shadowDepth);
-        float ambB = ColorMath.lerp(state.ambientColor.z(), atm.shadowTintColor[2] * 0.32f, 0.65f * cfg.shadowDepth);
+        state.skyLightColor = new Vector3f(
+                ColorMath.lerp(state.skyLightColor.x(), skyR, 0.85f * ColorMath.clamp01(warmth)),
+                ColorMath.lerp(state.skyLightColor.y(), skyG, 0.85f * ColorMath.clamp01(warmth)),
+                ColorMath.lerp(state.skyLightColor.z(), skyB, 0.85f * ColorMath.clamp01(warmth))
+        );
+
+        // 2. Deep cool atmospheric shadow fill (replaces vanilla's flat washed-out gray)
+        float ambR = ColorMath.lerp(0.05f, ColorMath.lerp(0.05f, 0.14f, atm.goldenHourFactor), atm.dayFactor);
+        float ambG = ColorMath.lerp(0.09f, ColorMath.lerp(0.10f, 0.08f, atm.goldenHourFactor), atm.dayFactor);
+        float ambB = ColorMath.lerp(0.22f, ColorMath.lerp(0.21f, 0.22f, atm.goldenHourFactor), atm.dayFactor);
         state.ambientColor = new Vector3f(ambR, ambG, ambB);
 
-        // Cozy 2700K incandescent torchlight with subtle organic flicker
+        // 3. Shape vanilla gamma lift so crevices & shadows keep cinematic depth
+        float contrastFactor = ColorMath.lerp(0.82f, 0.48f, cfg.shadowDepth);
+        state.brightness = state.brightness * contrastFactor;
+
+        // 4. Warm 2600K incandescent torch/lantern block light with gentle organic flicker
         float flicker = 1.0f;
         if (cfg.torchFlicker > 0.001f) {
-            flicker += (float) (Math.sin(t * 7.3) * 0.02 + Math.sin(t * 13.7) * 0.012) * cfg.torchFlicker;
+            flicker += (float) (Math.sin(t * 7.3) * 0.025 + Math.sin(t * 13.7) * 0.015) * cfg.torchFlicker;
         }
         state.blockLightTint = new Vector3f(
-                atm.torchColor[0] * flicker,
-                atm.torchColor[1] * flicker,
-                atm.torchColor[2] * flicker
+                1.00f * flicker,
+                0.50f * flicker,
+                0.13f * flicker
         );
-        state.blockFactor = ColorMath.clamp(state.blockFactor * (1.08f + 0.14f * atm.nightFactor), 0f, 1.35f);
+        state.blockFactor = ColorMath.clamp(state.blockFactor * (1.28f + 0.30f * atm.nightFactor), 0f, 1.85f);
         state.needsUpdate = true;
     }
 }

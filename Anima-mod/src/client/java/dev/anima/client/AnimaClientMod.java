@@ -61,7 +61,11 @@ public class AnimaClientMod implements ClientModInitializer {
         while (toggleKey.consumeClick()) {
             AnimaConfig cfg = AnimaMod.config();
             cfg.enabled = !cfg.enabled;
+            if (cfg.enabled && cfg.preset == AnimaConfig.Preset.VANILLA) {
+                cfg.applyPreset(AnimaConfig.Preset.LUSH);
+            }
             cfg.save(AnimaMod.configPath());
+            refreshSurroundingChunks(client);
             notifyPlayer(client, "Anima: " + (cfg.isActive() ? "ON (" + cfg.preset.displayName() + ")" : "OFF (Vanilla)"));
         }
 
@@ -69,8 +73,24 @@ public class AnimaClientMod implements ClientModInitializer {
             AnimaConfig cfg = AnimaMod.config();
             cfg.applyPreset(cfg.preset.next());
             cfg.save(AnimaMod.configPath());
+            refreshSurroundingChunks(client);
             notifyPlayer(client, "Anima Preset: " + cfg.preset.displayName());
         }
+    }
+
+    /**
+     * Immediately marks nearby chunk sections dirty so biome grass/foliage/water tints
+     * and dynamic handheld lighting update the instant Anima is toggled.
+     */
+    public static void refreshSurroundingChunks(Minecraft client) {
+        if (client.level == null || client.player == null) {
+            return;
+        }
+        int cx = client.player.getBlockX() >> 4;
+        int cy = client.player.getBlockY() >> 4;
+        int cz = client.player.getBlockZ() >> 4;
+        int radius = Math.min(8, Math.max(4, client.options.renderDistance().get()));
+        client.level.setSectionRangeDirty(cx - radius, cy - 4, cz - radius, cx + radius, cy + 4, cz + radius);
     }
 
     private static void notifyPlayer(Minecraft client, String message) {
