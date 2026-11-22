@@ -7,10 +7,14 @@ import dev.anima.core.AnimaConfig;
 import net.fabricmc.api.ClientModInitializer;
 import net.fabricmc.fabric.api.client.event.lifecycle.v1.ClientTickEvents;
 import net.fabricmc.fabric.api.client.keymapping.v1.KeyMappingHelper;
+import net.fabricmc.fabric.api.resource.v1.ResourceLoader;
+import net.fabricmc.fabric.api.resource.v1.pack.PackActivationType;
+import net.fabricmc.loader.api.FabricLoader;
 import net.minecraft.client.KeyMapping;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.multiplayer.ClientLevel;
 import net.minecraft.network.chat.Component;
+import net.minecraft.resources.Identifier;
 import org.lwjgl.glfw.GLFW;
 
 public class AnimaClientMod implements ClientModInitializer {
@@ -44,8 +48,17 @@ public class AnimaClientMod implements ClientModInitializer {
                 KeyMapping.Category.MISC
         ));
 
+        FabricLoader.getInstance().getModContainer(AnimaMod.MOD_ID).ifPresent(container ->
+                ResourceLoader.registerBuiltinPack(
+                        Identifier.fromNamespaceAndPath(AnimaMod.MOD_ID, "anima_shaders"),
+                        container,
+                        Component.literal("Anima Shaders (Vanilla & Sodium)"),
+                        PackActivationType.ALWAYS_ENABLED
+                )
+        );
+
         ClientTickEvents.END_CLIENT_TICK.register(AnimaClientMod::onClientTick);
-        AnimaMod.LOGGER.info("Anima client pipeline ready (OpenGL & Vulkan compatible, shader-free)");
+        AnimaMod.LOGGER.info("Anima client pipeline ready (Vanilla & Sodium 26.2, OpenGL & Vulkan compatible)");
     }
 
     private static void onClientTick(Minecraft client) {

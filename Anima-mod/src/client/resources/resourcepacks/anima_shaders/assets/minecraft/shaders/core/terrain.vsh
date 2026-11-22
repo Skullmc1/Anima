@@ -26,13 +26,16 @@ void main() {
     vec3 worldPos = Position + vec3(ChunkPosition);
     vec3 pos = Position + (ChunkPosition - CameraBlockPos) + CameraOffset;
 
-    // 1. Animated Wavy Water (tagged with Color.a = 254/255 by FluidRendererMixin when Anima is ON)
-    float isWater = (Color.a < 0.998 && Color.a > 0.990) ? 1.0 : 0.0;
+    float animaWaterOn = (fract(FogEnvironmentalEnd) > 0.25) ? 1.0 : 0.0;
+    float isWater = (animaWaterOn > 0.5 && Color.a < 0.998 && Color.a > 0.990) ? 1.0 : 0.0;
     vec4 cleanColor = Color;
     float wave = 0.0;
 
-    if (isWater > 0.5) {
+    if (Color.a < 0.998 && Color.a > 0.990) {
         cleanColor.a = 1.0;
+    }
+
+    if (isWater > 0.5) {
         float t = GameTime * 3600.0;
         float w1 = sin(worldPos.x * 1.15 + worldPos.z * 0.78 + t * 2.4) * 0.048;
         float w2 = cos(worldPos.x * 0.72 - worldPos.z * 1.42 + t * 1.85) * 0.032;
@@ -42,9 +45,8 @@ void main() {
         pos.y += wave * topMask;
     }
 
-    // 2. Zero-Lag Per-Frame GPU Dynamic Handheld Lighting (60/120/240+ FPS, zero chunk rebuilds!)
-    // Smooth wall-clock faded luminance (0..15) is encoded in fract(FogSkyEnd).
-    float heldLum = clamp(fract(FogSkyEnd) * (16.0 / 0.96), 0.0, 15.0);
+    // Zero-lag per-frame GPU dynamic handheld lighting (encoded in fract(FogRenderDistanceEnd))
+    float heldLum = clamp(fract(FogRenderDistanceEnd) * (16.0 / 0.96), 0.0, 15.0);
     ivec2 finalUV2 = UV2;
     if (heldLum > 0.05) {
         float dist = length(pos);

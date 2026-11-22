@@ -37,16 +37,18 @@ public class WaterFogMixin {
     private void anima$enhanceWaterClarity(FogData fogData, Camera camera, ClientLevel level, float renderDistance, DeltaTracker deltaTracker, CallbackInfo ci) {
         AnimaConfig cfg = AnimaMod.config();
 
+        if (cfg.isActive() && cfg.waterEnhancement) {
+            float clarityBoost = 1.0f + 0.45f * cfg.waterClarity;
+            fogData.environmentalEnd *= clarityBoost;
+            fogData.renderDistanceEnd *= clarityBoost;
+        }
+
         float heldLum = (cfg.isActive() && cfg.dynamicHandheldLight)
                 ? AnimaDynamicLightEngine.sampleSmoothPlayerLuminance()
                 : 0f;
-        fogData.skyEnd = (float) Math.floor(Math.max(16.0f, fogData.skyEnd)) + (heldLum / 16.0f) * 0.96f;
+        fogData.renderDistanceEnd = (float) Math.floor(Math.max(16.0f, fogData.renderDistanceEnd)) + (heldLum / 16.0f) * 0.96f;
 
-        if (!cfg.isActive() || !cfg.waterEnhancement) {
-            return;
-        }
-        float clarityBoost = 1.0f + 0.45f * cfg.waterClarity;
-        fogData.environmentalEnd *= clarityBoost;
-        fogData.renderDistanceEnd *= clarityBoost;
+        float waterFlag = (cfg.isActive() && cfg.waterEnhancement) ? 0.5f : 0.0f;
+        fogData.environmentalEnd = (float) Math.floor(Math.max(16.0f, fogData.environmentalEnd)) + waterFlag;
     }
 }

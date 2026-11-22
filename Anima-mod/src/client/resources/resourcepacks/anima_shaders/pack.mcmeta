@@ -1,0 +1,7 @@
+{
+  "pack": {
+    "description": "Anima Shaders (Vanilla & Sodium 26.2)",
+    "min_format": 1,
+    "max_format": 999
+  }
+}

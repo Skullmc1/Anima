@@ -1,19 +1,21 @@
-#version 330
+#version 330 core
 
-#moj_import <minecraft:fog.glsl>
-#moj_import <minecraft:globals.glsl>
-#moj_import <minecraft:chunksection.glsl>
+#moj_import <sodium:globals.glsl>
+#moj_import <sodium:fog.glsl>
+#moj_import <sodium:chunk_material.glsl>
 
-uniform sampler2D Sampler0;
+in vec4 v_Color;
+in vec2 v_TexCoord;
+in vec2 v_FragDistance;
+in float fadeFactor;
 
-in float sphericalVertexDistance;
-in float cylindricalVertexDistance;
-in vec4 vertexColor;
-in vec2 texCoord0;
-in float vAnimaWater;
-in vec3 vWaterWorldPos;
-in vec3 vWaterRelPos;
-in float vWaveHeight;
+in float v_AnimaWater;
+in vec3 v_WaterRelPos;
+in vec2 v_WaterPhaseCoord;
+in float v_WaveHeight;
+in float v_WaterTime;
+
+uniform sampler2D u_BlockTex;
 
 out vec4 fragColor;
 
@@ -58,10 +60,6 @@ vec4 sampleRGSS(sampler2D source, vec2 uv, vec2 pixelSize) {
 
     float mipLevelExact = max(0.0, log2(effectiveDerivative / minPixelSize));
 
-    float mipLevelLow = floor(mipLevelExact);
-    float mipLevelHigh = mipLevelLow + 1.0;
-    float mipBlend = fract(mipLevelExact);
-
     const vec2 offsets[4] = vec2[](
     vec2(0.125, 0.375),
     vec2(-0.125, -0.375),
@@ -69,55 +67,50 @@ vec4 sampleRGSS(sampler2D source, vec2 uv, vec2 pixelSize) {
     vec2(-0.375, 0.125)
     );
 
-    vec4 rgssColorLow = vec4(0.0);
-    vec4 rgssColorHigh = vec4(0.0);
+    vec4 rgssColor = vec4(0.0);
     for (int i = 0; i < 4; ++i) {
         vec2 sampleUV = uv + offsets[i] * pixelSize;
-        rgssColorLow += textureLod(source, sampleUV, mipLevelLow);
-        rgssColorHigh += textureLod(source, sampleUV, mipLevelHigh);
+        rgssColor += textureLod(source, sampleUV, mipLevelExact);
     }
-    rgssColorLow *= 0.25;
-    rgssColorHigh *= 0.25;
+    rgssColor *= 0.25;
 
-    vec4 rgssColor = mix(rgssColorLow, rgssColorHigh, mipBlend);
     vec4 nearestColor = sampleNearest(source, uv, pixelSize, du, dv, texelScreenSize);
 
     return mix(nearestColor, rgssColor, blendFactor);
 }
 
 void main() {
-    vec4 color = (UseRgss == 1 ? sampleRGSS(Sampler0, texCoord0, 1.0f / TextureSize) : sampleNearest(Sampler0, texCoord0, 1.0f / TextureSize)) * vertexColor;
+    vec4 color = u_UseRGSS ? sampleRGSS(u_BlockTex, v_TexCoord, u_TexelSize) : sampleNearest(u_BlockTex, v_TexCoord, u_TexelSize);
+    color *= v_Color;
 
-    if (vAnimaWater > 0.5) {
-        // Bold, crisp animated dual-layer ripples + Fresnel sky reflections + wave-crest sparkles
-        float t = GameTime * 3600.0;
-        vec2 wp = vWaterWorldPos.xz;
+#ifdef ALPHA_CUTOUT
+    if (color.a < ALPHA_CUTOUT) {
+        discard;
+    }
+#else
+    // Translucent water enhancement in Sodium (only triggers on translucent water surfaces!)
+    if (v_AnimaWater > 0.5 && color.a < 0.98 && color.a > 0.12) {
+        float t = v_WaterTime;
+        vec2 wp = v_WaterPhaseCoord;
         float r1 = sin(wp.x * 3.2 + wp.y * 2.1 + t * 3.1) * cos(wp.x * 2.0 - wp.y * 3.5 + t * 2.4);
         float r2 = sin(wp.x * 5.8 - wp.y * 5.1 - t * 3.8);
         float r3 = cos(wp.x * 9.0 + wp.y * 7.5 + t * 4.6) * 0.35;
         float ripple = r1 * 0.55 + r2 * 0.30 + r3 * 0.15;
 
-        // Visible Fresnel sky/horizon reflection even at normal 45-degree gameplay angles
-        vec3 viewDir = normalize(vWaterRelPos);
+        vec3 viewDir = normalize(v_WaterRelPos);
         float cosTheta = clamp(abs(viewDir.y) + ripple * 0.12, 0.05, 1.0);
         float fresnel = 0.16 + 0.74 * pow(1.0 - cosTheta, 2.2);
 
-        // Crystal turquoise-sapphire water tint + sky reflection + sunlit wave crests & sparkles
         vec3 waterBase = color.rgb * vec3(0.76, 1.12, 1.16);
-        vec3 skyRefl = FogColor.rgb * 1.15;
-        float crest = smoothstep(0.01, 0.07, vWaveHeight + ripple * 0.03) * 0.32;
+        vec3 skyRefl = u_FogColor.rgb * 1.15;
+        float crest = smoothstep(0.01, 0.07, v_WaveHeight + ripple * 0.03) * 0.32;
         float sparkle = smoothstep(0.50, 0.92, ripple) * 0.28;
 
         color.rgb = mix(waterBase, skyRefl, fresnel * 0.72);
         color.rgb += (skyRefl * 0.65 + vec3(0.35)) * (crest + sparkle);
         color.a = clamp(mix(color.a * 0.78, 0.95, fresnel), 0.42, 0.96);
     }
-
-    color = mix(FogColor * vec4(1, 1, 1, color.a), color, ChunkVisibility);
-#ifdef ALPHA_CUTOUT
-    if (color.a < ALPHA_CUTOUT) {
-        discard;
-    }
 #endif
-    fragColor = apply_fog(color, sphericalVertexDistance, cylindricalVertexDistance, FogEnvironmentalStart, FogEnvironmentalEnd, FogRenderDistanceStart, FogRenderDistanceEnd, FogColor);
+
+    fragColor = _linearFog(color, v_FragDistance, u_FogColor, u_EnvironmentFog, u_RenderFog, fadeFactor);
 }

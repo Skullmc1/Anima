@@ -47,20 +47,23 @@ public class AtmosphericFogMixin {
     private void anima$setupAerialPerspective(FogData fogData, Camera camera, ClientLevel level, float renderDistance, DeltaTracker deltaTracker, CallbackInfo ci) {
         AnimaConfig cfg = AnimaMod.config();
 
-        // Always encode per-frame smooth handheld light luminance (0..15) in FogSkyEnd's fractional part
-        // so terrain.vsh computes zero-lag, full-FPS dynamic handheld lighting with zero chunk rebuilds!
+        if (cfg.isActive() && cfg.atmosphericFog) {
+            AnimaAtmosphere atm = AnimaClientMod.atmosphere();
+            float startMult = AnimaFogEngine.fogStartMultiplier(atm, cfg);
+            fogData.renderDistanceStart = Math.min(fogData.renderDistanceStart, renderDistance * startMult);
+            fogData.environmentalStart = Math.min(fogData.environmentalStart, renderDistance * (startMult * 0.85f));
+            fogData.environmentalEnd = Math.min(fogData.environmentalEnd, renderDistance * (1.05f - 0.15f * atm.goldenHourFactor));
+        }
+
+        // Encode per-frame smooth handheld light luminance (0..15) in renderDistanceEnd's fractional part
+        // AND Anima water wave toggle in environmentalEnd's fractional part.
+        // Works identically in BOTH Vanilla (FogRenderDistanceEnd / FogEnvironmentalEnd) AND Sodium (u_RenderFog.y / u_EnvironmentFog.y)!
         float heldLum = (cfg.isActive() && cfg.dynamicHandheldLight)
                 ? AnimaDynamicLightEngine.sampleSmoothPlayerLuminance()
                 : 0f;
-        fogData.skyEnd = (float) Math.floor(Math.max(16.0f, fogData.skyEnd)) + (heldLum / 16.0f) * 0.96f;
+        fogData.renderDistanceEnd = (float) Math.floor(Math.max(16.0f, fogData.renderDistanceEnd)) + (heldLum / 16.0f) * 0.96f;
 
-        if (!cfg.isActive() || !cfg.atmosphericFog) {
-            return;
-        }
-        AnimaAtmosphere atm = AnimaClientMod.atmosphere();
-        float startMult = AnimaFogEngine.fogStartMultiplier(atm, cfg);
-        fogData.renderDistanceStart = Math.min(fogData.renderDistanceStart, renderDistance * startMult);
-        fogData.environmentalStart = Math.min(fogData.environmentalStart, renderDistance * (startMult * 0.85f));
-        fogData.environmentalEnd = Math.min(fogData.environmentalEnd, renderDistance * (1.05f - 0.15f * atm.goldenHourFactor));
+        float waterFlag = (cfg.isActive() && cfg.waterEnhancement) ? 0.5f : 0.0f;
+        fogData.environmentalEnd = (float) Math.floor(Math.max(16.0f, fogData.environmentalEnd)) + waterFlag;
     }
 }
