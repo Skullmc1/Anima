@@ -53,7 +53,9 @@ void main() {
     float animaTime = float(u_CurrentTime & 1048575) * 0.001;
     const float H = 0.3926990817; // 2*PI / 16.0 -> seamless across all chunks & regions
 
-    float animaOn = (fract(u_EnvironmentFog.y) > 0.25) ? 1.0 : 0.0;
+    float modeFrac = fract(u_EnvironmentFog.y);
+    float animaMode = (modeFrac > 0.55) ? 2.0 : ((modeFrac > 0.15) ? 1.0 : 0.0);
+    float animaOn = (animaMode > 0.5) ? 1.0 : 0.0;
     vec2 phaseCoord = _vert_position.xz + drawTrans.xz;
     float fy = fract(_vert_position.y);
     float wave = 0.0;
@@ -117,7 +119,7 @@ void main() {
     lit.rgb *= sssTint;
     v_Color = lit;
     v_TexCoord = (_vert_tex_diffuse_coord_bias * u_TexCoordShrink) + _vert_tex_diffuse_coord;
-    v_AnimaActive = animaOn;
+    v_AnimaActive = animaMode;
     v_AnimaWater = isWaterCandidate;
     v_WaterRelPos = position;
     v_WaterPhaseCoord = phaseCoord;

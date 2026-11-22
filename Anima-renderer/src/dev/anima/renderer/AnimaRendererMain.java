@@ -130,6 +130,32 @@ public final class AnimaRendererMain {
         ImageIO.write(sunSheet, "png", sunPath.toFile());
         System.out.println("[Anima-renderer] Saved sun showcase -> " + sunPath.toAbsolutePath());
 
+        // Dedicated 3-Mode Showcase: Vanilla vs Lush vs Borderlands (Cel-Shaded Comic)
+        AnimaAtmosphere modeAtm = new AnimaAtmosphere(5200f, 0f);
+        AnimaConfig borderlandsCfg = AnimaConfig.borderlands();
+        int mw = 720, mh = 405;
+        BufferedImage mVan = renderer.render(mw, mh, camX, camY, camZ, lookX, lookY, lookZ, fov, modeAtm, vanillaCfg, 2.5f);
+        BufferedImage mLush = renderer.render(mw, mh, camX, camY, camZ, lookX, lookY, lookZ, fov, modeAtm, animaCfg, 2.5f);
+        BufferedImage mBord = renderer.render(mw, mh, camX, camY, camZ, lookX, lookY, lookZ, fov, modeAtm, borderlandsCfg, 2.5f);
+        BufferedImage modeSheet = new BufferedImage(mw * 3 + pad * 4, mh + pad * 2 + headerH, BufferedImage.TYPE_INT_RGB);
+        Graphics2D mg = modeSheet.createGraphics();
+        mg.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        mg.setColor(new Color(18, 20, 26));
+        mg.fillRect(0, 0, modeSheet.getWidth(), modeSheet.getHeight());
+        mg.setFont(new Font("SansSerif", Font.BOLD, 20));
+        mg.setColor(new Color(235, 240, 248));
+        mg.drawString("ANIMA v0.8.0 — Visual Modes: Off (Vanilla)  vs  Lush (Cinematic)  vs  Borderlands (Cel-Shaded)", pad + 6, 30);
+        mg.drawImage(mVan, pad, headerH + pad, null);
+        mg.drawImage(mLush, pad * 2 + mw, headerH + pad, null);
+        mg.drawImage(mBord, pad * 3 + mw * 2, headerH + pad, null);
+        drawBadge(mg, pad + 12, headerH + pad + 12, "OFF (Vanilla)", new Color(25, 28, 35, 195), Color.WHITE);
+        drawBadge(mg, pad * 2 + mw + 12, headerH + pad + 12, "LUSH (Cinematic)", new Color(18, 48, 62, 210), new Color(165, 240, 255));
+        drawBadge(mg, pad * 3 + mw * 2 + 12, headerH + pad + 12, "BORDERLANDS (Cel-Shaded)", new Color(68, 40, 12, 220), new Color(255, 210, 90));
+        mg.dispose();
+        Path modePath = outDir.resolve("borderlands_showcase.png");
+        ImageIO.write(modeSheet, "png", modePath.toFile());
+        System.out.println("[Anima-renderer] Saved Borderlands mode showcase -> " + modePath.toAbsolutePath());
+
         // Optional 3-way Shader Pack Benchmark: Vanilla vs Anima v0.6.0 vs Iris/OptiFine Shader Pack (.zip)
         Path shaderZip = null;
         String shaderName = null;

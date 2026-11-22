@@ -100,7 +100,72 @@ public final class VoxelRenderer {
         });
 
         img.setRGB(0, 0, width, height, pixels, 0, width);
+
+        // If Borderlands cel-shaded mode is active, apply exact cel bands + punchy saturation + comic ink outlines
+        if (config.isBorderlands()) {
+            applyBorderlandsPostPass(img);
+        }
         return img;
+    }
+
+    private static void applyBorderlandsPostPass(BufferedImage img) {
+        int w = img.getWidth();
+        int h = img.getHeight();
+        int[] src = img.getRGB(0, 0, w, h, null, 0, w);
+        int[] dst = new int[w * h];
+
+        float[] lumBuf = new float[w * h];
+        for (int i = 0; i < src.length; i++) {
+            float r = ((src[i] >> 16) & 0xFF) / 255f;
+            float g = ((src[i] >> 8) & 0xFF) / 255f;
+            float b = (src[i] & 0xFF) / 255f;
+            lumBuf[i] = 0.2126f * r + 0.7152f * g + 0.0722f * b;
+        }
+
+        IntStream.range(0, h).parallel().forEach(y -> {
+            for (int x = 0; x < w; x++) {
+                int idx = y * w + x;
+                float r = ((src[idx] >> 16) & 0xFF) / 255f;
+                float g = ((src[idx] >> 8) & 0xFF) / 255f;
+                float b = (src[idx] & 0xFF) / 255f;
+                float lum = lumBuf[idx];
+
+                // 1. Punchy Borderlands saturation (1.42x)
+                float sr = ColorMath.clamp01(lum + (r - lum) * 1.42f);
+                float sg = ColorMath.clamp01(lum + (g - lum) * 1.42f);
+                float sb = ColorMath.clamp01(lum + (b - lum) * 1.42f);
+
+                // 2. Stepped cel-shading bands (4.5 bands)
+                float bands = 4.5f;
+                float scaled = lum * bands;
+                float baseBand = (float) Math.floor(scaled);
+                float frac = ColorMath.smoothstep(0.38f, 0.62f, scaled - baseBand);
+                float celLum = ColorMath.clamp((baseBand + frac + 0.15f) / (bands + 0.15f), 0.05f, 1.0f);
+                float mul = celLum / Math.max(0.04f, lum);
+                float cr = ColorMath.clamp01(sr * mul);
+                float cg = ColorMath.clamp01(sg * mul);
+                float cb = ColorMath.clamp01(sb * mul);
+                cr = ColorMath.lerp(cr, cr * cr * 1.18f, 0.25f);
+                cg = ColorMath.lerp(cg, cg * cg * 1.18f, 0.25f);
+                cb = ColorMath.lerp(cb, cb * cb * 1.18f, 0.25f);
+
+                // 3. Sobel comic ink outlines
+                int xm = Math.max(0, x - 1), xp = Math.min(w - 1, x + 1);
+                int ym = Math.max(0, y - 1), yp = Math.min(h - 1, y + 1);
+                float gx = -lumBuf[ym * w + xm] - 2f * lumBuf[y * w + xm] - lumBuf[yp * w + xm]
+                         +  lumBuf[ym * w + xp] + 2f * lumBuf[y * w + xp] + lumBuf[yp * w + xp];
+                float gy = -lumBuf[ym * w + xm] - 2f * lumBuf[ym * w + x] - lumBuf[ym * w + xp]
+                         +  lumBuf[yp * w + xm] + 2f * lumBuf[yp * w + x] + lumBuf[yp * w + xp];
+                float edge = (float) Math.sqrt(gx * gx + gy * gy);
+                float outline = ColorMath.smoothstep(0.24f, 0.58f, edge) * 0.88f;
+
+                cr = ColorMath.lerp(cr, 0.06f, outline);
+                cg = ColorMath.lerp(cg, 0.05f, outline);
+                cb = ColorMath.lerp(cb, 0.08f, outline);
+                dst[idx] = ColorMath.packRgb(cr, cg, cb);
+            }
+        });
+        img.setRGB(0, 0, w, h, dst, 0, w);
     }
 
     private void tracePrimaryRay(

@@ -8,22 +8,29 @@ import java.nio.file.Path;
 import java.util.Properties;
 
 /**
- * Configuration for Anima (Lush mode ON / Vanilla OFF).
+ * Configuration for Anima visual modes: Off (Vanilla), Lush, and Borderlands (Cel-Shaded).
  */
 public final class AnimaConfig {
 
     public enum Preset {
-        VANILLA("Vanilla (Off)"),
-        LUSH("Lush");
+        VANILLA("Off", "Vanilla"),
+        LUSH("Lush", "Cinematic"),
+        BORDERLANDS("Borderlands", "Cel-Shaded");
 
         private final String displayName;
+        private final String subtitle;
 
-        Preset(String displayName) {
+        Preset(String displayName, String subtitle) {
             this.displayName = displayName;
+            this.subtitle = subtitle;
         }
 
         public String displayName() {
             return displayName;
+        }
+
+        public String subtitle() {
+            return subtitle;
         }
     }
 
@@ -55,6 +62,12 @@ public final class AnimaConfig {
     public static AnimaConfig lush() {
         AnimaConfig c = new AnimaConfig();
         c.applyPreset(Preset.LUSH);
+        return c;
+    }
+
+    public static AnimaConfig borderlands() {
+        AnimaConfig c = new AnimaConfig();
+        c.applyPreset(Preset.BORDERLANDS);
         return c;
     }
 
@@ -101,11 +114,45 @@ public final class AnimaConfig {
                 filmicStrength = 0.58f;
                 torchFlicker = 0.35f;
             }
+            case BORDERLANDS -> {
+                enabled = true;
+                atmosphericLightmap = true;
+                skyEnhancement = true;
+                atmosphericFog = true;
+                waterEnhancement = true;
+                directionalShading = true;
+                foliageEnhancement = true;
+                dynamicHandheldLight = true;
+                warmthStrength = 1.12f;
+                shadowDepth = 0.96f;
+                fogDensity = 0.38f;
+                waterClarity = 0.85f;
+                saturationBoost = 1.38f;
+                filmicStrength = 0.45f;
+                torchFlicker = 0.25f;
+            }
         }
     }
 
     public boolean isActive() {
-        return enabled && preset == Preset.LUSH;
+        return enabled && preset != Preset.VANILLA;
+    }
+
+    public boolean isBorderlands() {
+        return enabled && preset == Preset.BORDERLANDS;
+    }
+
+    /**
+     * Encodes the active visual mode into a fractional float for FogData.environmentalEnd:
+     * 0.00 = Off, 0.35 = Lush, 0.75 = Borderlands.
+     */
+    public float gpuModeFraction() {
+        if (!isActive()) return 0.0f;
+        return switch (preset) {
+            case LUSH -> 0.35f;
+            case BORDERLANDS -> 0.75f;
+            default -> 0.0f;
+        };
     }
 
     public void load(Path path) {
@@ -117,9 +164,10 @@ public final class AnimaConfig {
         try (InputStream in = Files.newInputStream(path)) {
             props.load(in);
             String pName = props.getProperty("preset", Preset.LUSH.name()).toUpperCase();
-            // Automatically migrate legacy POTATO / BALANCED presets to LUSH
             if ("VANILLA".equals(pName)) {
                 applyPreset(Preset.VANILLA);
+            } else if ("BORDERLANDS".equals(pName)) {
+                applyPreset(Preset.BORDERLANDS);
             } else {
                 applyPreset(Preset.LUSH);
             }
@@ -151,7 +199,7 @@ public final class AnimaConfig {
                 Files.createDirectories(path.getParent());
             }
             try (OutputStream out = Files.newOutputStream(path)) {
-                props.store(out, "Anima Mod Configuration - Lush Shader-Free Visuals");
+                props.store(out, "Anima Mod Configuration");
             }
         } catch (IOException ignored) {
         }

@@ -80,13 +80,45 @@ vec4 sampleRGSS(sampler2D source, vec2 uv, vec2 pixelSize) {
     return mix(nearestColor, rgssColor, blendFactor);
 }
 
-// Fast ACES/Complementary-inspired filmic tonemap + subtle vibrancy (zero extra render passes!)
+// Fast ACES/Complementary-inspired filmic tonemap + subtle vibrancy (Lush mode)
 vec3 animaFilmicGrade(vec3 c) {
     vec3 x = max(vec3(0.0), c * 1.12);
     vec3 mapped = clamp((x * (2.51 * x + 0.03)) / (x * (2.43 * x + 0.59) + 0.14), 0.0, 1.0);
     vec3 graded = mix(c, mapped, 0.42);
     float lum = dot(graded, vec3(0.2126, 0.7152, 0.0722));
     return clamp(mix(vec3(lum), graded, 1.12), 0.0, 1.0);
+}
+
+// Borderlands Cel-Shaded Comic Pipeline: stepped cel bands + punchy saturation + crisp ink outlines (no poison green!)
+vec3 animaBorderlandsGrade(vec3 c, vec3 relPos) {
+    // 1. Punchy Borderlands saturation & warm crisp contrast
+    float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    vec3 sat = clamp(mix(vec3(lum), c, 1.42), 0.0, 1.0);
+
+    // 2. Stepped comic cel-shading luminance bands (4.5 crisp bands with anti-aliased transitions)
+    float bands = 4.5;
+    float scaled = lum * bands;
+    float baseBand = floor(scaled);
+    float frac = smoothstep(0.38, 0.62, fract(scaled));
+    float celLum = clamp((baseBand + frac + 0.15) / (bands + 0.15), 0.05, 1.0);
+    vec3 cel = clamp(sat * (celLum / max(0.04, lum)), 0.0, 1.0);
+    // Subtle dark shadow crush for graphic comic punch
+    cel = mix(cel, cel * cel * 1.18, 0.25);
+
+    // 3. Crisp comic-book ink outlines via screen-space geometry & luminance edge detection
+    float dist = length(relPos);
+    vec3 dPosX = dFdx(relPos);
+    vec3 dPosY = dFdy(relPos);
+    vec3 faceN = normalize(cross(dPosX, dPosY) + vec3(1e-6));
+    float normalEdge = length(fwidth(faceN));
+    float depthEdge = fwidth(dist) / max(1.0, dist * 0.085);
+    float lumEdge = fwidth(lum) * 2.2;
+
+    float distFade = 1.0 - smoothstep(24.0, 68.0, dist);
+    float outline = smoothstep(0.55, 1.15, normalEdge * 1.45 + depthEdge * 0.65 + lumEdge * 0.55) * distFade;
+
+    vec3 inkColor = vec3(0.06, 0.05, 0.08);
+    return mix(cel, inkColor, clamp(outline * 0.88, 0.0, 0.88));
 }
 
 void main() {
@@ -128,7 +160,9 @@ void main() {
     }
 #endif
 
-    if (v_AnimaActive > 0.5) {
+    if (v_AnimaActive > 1.5) {
+        color.rgb = animaBorderlandsGrade(color.rgb, v_WaterRelPos);
+    } else if (v_AnimaActive > 0.5) {
         color.rgb = animaFilmicGrade(color.rgb);
     }
 

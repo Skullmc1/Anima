@@ -14,11 +14,9 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Encodes Anima's per-frame smooth handheld light luminance (0..15) and water-wave flag
- * into FogData AFTER FogRenderer.setupFog finishes overwriting renderDistanceStart/End.
- *
- * Guarantees both Vanilla (terrain.vsh) and Sodium (block_layer_opaque.vsh) receive
- * real-time 60/120/240 FPS handheld dynamic lighting with zero lag and zero chunk rebuilds!
+ * Encodes Anima's per-frame smooth handheld light luminance (0..15) in renderDistanceEnd
+ * and active visual mode (0.0 = Off, 0.35 = Lush, 0.75 = Borderlands) in environmentalEnd
+ * AFTER FogRenderer.setupFog finishes overwriting fog distances.
  */
 @Mixin(FogRenderer.class)
 public class FogRendererMixin {
@@ -43,7 +41,7 @@ public class FogRendererMixin {
                 : 0f;
         fogData.renderDistanceEnd = (float) Math.floor(Math.max(16.0f, fogData.renderDistanceEnd)) + (heldLum / 16.0f) * 0.96f;
 
-        float waterFlag = (cfg.isActive() && cfg.waterEnhancement) ? 0.5f : 0.0f;
-        fogData.environmentalEnd = (float) Math.floor(Math.max(16.0f, fogData.environmentalEnd)) + waterFlag;
+        float modeFrac = cfg.gpuModeFraction();
+        fogData.environmentalEnd = (float) Math.floor(Math.max(16.0f, fogData.environmentalEnd)) + modeFrac;
     }
 }

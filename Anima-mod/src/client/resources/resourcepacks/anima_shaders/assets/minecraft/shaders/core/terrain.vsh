@@ -28,7 +28,9 @@ void main() {
     vec3 pos = Position + (ChunkPosition - CameraBlockPos) + CameraOffset;
 
     const float H = 0.3926990817;
-    float animaOn = (fract(FogEnvironmentalEnd) > 0.25) ? 1.0 : 0.0;
+    float modeFrac = fract(FogEnvironmentalEnd);
+    float animaMode = (modeFrac > 0.55) ? 2.0 : ((modeFrac > 0.15) ? 1.0 : 0.0);
+    float animaOn = (animaMode > 0.5) ? 1.0 : 0.0;
     float isWater = (animaOn > 0.5 && Color.a < 0.998 && Color.a > 0.990) ? 1.0 : 0.0;
     vec4 cleanColor = Color;
     float wave = 0.0;
@@ -85,7 +87,7 @@ void main() {
     lit.rgb *= sssTint;
     vertexColor = lit;
     texCoord0 = UV0;
-    vAnimaActive = animaOn;
+    vAnimaActive = animaMode;
     vAnimaWater = isWater;
     vWaterWorldPos = worldPos;
     vWaterRelPos = pos;

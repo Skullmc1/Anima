@@ -94,6 +94,33 @@ vec3 animaFilmicGrade(vec3 c) {
     return clamp(mix(vec3(lum), graded, 1.12), 0.0, 1.0);
 }
 
+vec3 animaBorderlandsGrade(vec3 c, vec3 relPos) {
+    float lum = dot(c, vec3(0.2126, 0.7152, 0.0722));
+    vec3 sat = clamp(mix(vec3(lum), c, 1.42), 0.0, 1.0);
+
+    float bands = 4.5;
+    float scaled = lum * bands;
+    float baseBand = floor(scaled);
+    float frac = smoothstep(0.38, 0.62, fract(scaled));
+    float celLum = clamp((baseBand + frac + 0.15) / (bands + 0.15), 0.05, 1.0);
+    vec3 cel = clamp(sat * (celLum / max(0.04, lum)), 0.0, 1.0);
+    cel = mix(cel, cel * cel * 1.18, 0.25);
+
+    float dist = length(relPos);
+    vec3 dPosX = dFdx(relPos);
+    vec3 dPosY = dFdy(relPos);
+    vec3 faceN = normalize(cross(dPosX, dPosY) + vec3(1e-6));
+    float normalEdge = length(fwidth(faceN));
+    float depthEdge = fwidth(dist) / max(1.0, dist * 0.085);
+    float lumEdge = fwidth(lum) * 2.2;
+
+    float distFade = 1.0 - smoothstep(24.0, 68.0, dist);
+    float outline = smoothstep(0.55, 1.15, normalEdge * 1.45 + depthEdge * 0.65 + lumEdge * 0.55) * distFade;
+
+    vec3 inkColor = vec3(0.06, 0.05, 0.08);
+    return mix(cel, inkColor, clamp(outline * 0.88, 0.0, 0.88));
+}
+
 void main() {
     vec4 color = (UseRgss == 1 ? sampleRGSS(Sampler0, texCoord0, 1.0f / TextureSize) : sampleNearest(Sampler0, texCoord0, 1.0f / TextureSize)) * vertexColor;
 
@@ -120,7 +147,9 @@ void main() {
         color.a = clamp(mix(0.50, 0.90, fresnel), 0.45, 0.92);
     }
 
-    if (vAnimaActive > 0.5) {
+    if (vAnimaActive > 1.5) {
+        color.rgb = animaBorderlandsGrade(color.rgb, vWaterRelPos);
+    } else if (vAnimaActive > 0.5) {
         color.rgb = animaFilmicGrade(color.rgb);
     }
 
