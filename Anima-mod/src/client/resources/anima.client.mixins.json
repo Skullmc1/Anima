@@ -1,0 +1,17 @@
+{
+	"required": true,
+	"package": "dev.anima.client.mixin",
+	"compatibilityLevel": "JAVA_25",
+	"client": [
+		"LightmapExtractorMixin",
+		"AtmosphericFogMixin",
+		"SkyRendererMixin",
+		"BiomeColorsMixin"
+	],
+	"injectors": {
+		"defaultRequire": 1
+	},
+	"overwrites": {
+		"requireAnnotations": true
+	}
+}

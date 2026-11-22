@@ -1,0 +1,22 @@
+# Gradle & Java
+.gradle/
+build/
+out/
+*.class
+*.jar
+!gradle/wrapper/gradle-wrapper.jar
+
+# IDE
+.idea/
+*.iml
+.vscode/
+.classpath
+.project
+.settings/
+
+# Minecraft run dir
+Anima-mod/run/
+
+# OS
+.DS_Store
+Thumbs.db

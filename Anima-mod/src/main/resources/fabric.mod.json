@@ -1,0 +1,32 @@
+{
+	"schemaVersion": 1,
+	"id": "anima",
+	"version": "${version}",
+	"name": "Anima",
+	"description": "Shader-free atmospheric visuals for Minecraft. Brings golden-hour lightmaps, aerial perspective fog, lush water depth, and vibrant skies with near-zero GPU overhead.",
+	"authors": [
+		"Anima Team"
+	],
+	"license": "MIT",
+	"environment": "client",
+	"entrypoints": {
+		"main": [
+			"dev.anima.AnimaMod"
+		],
+		"client": [
+			"dev.anima.client.AnimaClientMod"
+		]
+	},
+	"mixins": [
+		{
+			"config": "anima.client.mixins.json",
+			"environment": "client"
+		}
+	],
+	"depends": {
+		"fabricloader": ">=0.20.1",
+		"minecraft": "~26.2",
+		"java": ">=25",
+		"fabric-api": "*"
+	}
+}
