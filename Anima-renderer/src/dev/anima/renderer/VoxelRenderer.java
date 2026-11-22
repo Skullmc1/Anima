@@ -106,9 +106,13 @@ public final class VoxelRenderer {
 
         img.setRGB(0, 0, width, height, pixels, 0, width);
 
-        // Apply exact v0.11.0 fullscreen PostChain effects: anima:borderlands or anima:lush!
+        // Apply exact v0.14.0 fullscreen PostChain effects: borderlands, color_pencil, blueprint, or lush!
         if (config.isBorderlands()) {
             applyBorderlandsDepthPostPass(img, depthBuf, false);
+        } else if (config.isColorPencil()) {
+            applyColorPencilPostPass(img, depthBuf);
+        } else if (config.isBlueprint()) {
+            applyBlueprintPostPass(img, depthBuf);
         } else if (config.isActive()) {
             applyLushBloomPostPass(img);
         }
@@ -261,9 +265,230 @@ public final class VoxelRenderer {
         img.setRGB(0, 0, w, h, dst, 0, w);
     }
 
+    private static float hash21(float px, float py) {
+        float x = (float) (px * 234.34 - Math.floor(px * 234.34));
+        float y = (float) (py * 435.345 - Math.floor(py * 435.345));
+        float d = x * (x + 34.23f) + y * (y + 34.23f);
+        x += d; y += d;
+        float p = x * y;
+        return (float) (p - Math.floor(p));
+    }
+
+    private static float valueNoise2D(float px, float py) {
+        float ix = (float) Math.floor(px), iy = (float) Math.floor(py);
+        float fx = px - ix, fy = py - iy;
+        fx = fx * fx * (3f - 2f * fx);
+        fy = fy * fy * (3f - 2f * fy);
+        float a = hash21(ix, iy);
+        float b = hash21(ix + 1f, iy);
+        float c = hash21(ix, iy + 1f);
+        float d = hash21(ix + 1f, iy + 1f);
+        return ColorMath.lerp(ColorMath.lerp(a, b, fx), ColorMath.lerp(c, d, fx), fy);
+    }
+
     /**
-     * Exact mirror of anima:post/lush (fullscreen bright-pass Bloom + warm/cool grading + ACES tonemap + gentle vignette).
+     * Exact mirror of anima:post/color_pencil (warm sketchbook paper grain + diagonal colored-pencil cross-hatching + graphite outlines).
      */
+    private static void applyColorPencilPostPass(BufferedImage img, float[] depthBuf) {
+        int w = img.getWidth(), h = img.getHeight();
+        int[] src = img.getRGB(0, 0, w, h, null, 0, w);
+        int[] dst = new int[w * h];
+        float[] lumBuf = new float[w * h];
+        for (int i = 0; i < src.length; i++) {
+            float r = ((src[i] >> 16) & 0xFF) / 255f;
+            float g = ((src[i] >> 8) & 0xFF) / 255f;
+            float b = (src[i] & 0xFF) / 255f;
+            lumBuf[i] = 0.2126f * r + 0.7152f * g + 0.0722f * b;
+        }
+        int[][] offsets = {{1, 0}, {0, 1}, {1, 1}, {-1, 1}};
+        IntStream.range(0, h).parallel().forEach(y -> {
+            for (int x = 0; x < w; x++) {
+                int idx = y * w + x;
+                float paperFine = valueNoise2D(x * 0.45f, y * 0.45f);
+                float paperCoarse = valueNoise2D(x * 0.12f + 17.3f, y * 0.12f + 9.1f);
+                float paperGrain = paperFine * 0.65f + paperCoarse * 0.35f;
+
+                int wx = Math.max(0, Math.min(w - 1, Math.round(x + (paperCoarse - 0.5f) * 0.9f)));
+                int wy = Math.max(0, Math.min(h - 1, Math.round(y + (valueNoise2D(x * 0.12f + 3.7f, y * 0.12f + 29.4f) - 0.5f) * 0.9f)));
+                int sPix = src[wy * w + wx];
+                float r = ((sPix >> 16) & 0xFF) / 255f;
+                float g = ((sPix >> 8) & 0xFF) / 255f;
+                float b = (sPix & 0xFF) / 255f;
+                float lum = 0.2126f * r + 0.7152f * g + 0.0722f * b;
+                float z0 = depthBuf[idx];
+
+                // 1. Vibrant colored-pencil pigment + warm cream sketchbook paper tooth
+                float pr = ColorMath.clamp01(lum + (r - lum) * 1.24f);
+                float pg = ColorMath.clamp01(lum + (g - lum) * 1.24f);
+                float pb = ColorMath.clamp01(lum + (b - lum) * 1.24f);
+                float paperScale = 0.94f + 0.10f * paperGrain;
+                float cr = 0.965f * paperScale, cg = 0.945f * paperScale, cb = 0.895f * paperScale;
+                float toothMix = ColorMath.smoothstep(0.55f, 0.98f, paperGrain) * 0.16f + 0.08f;
+                float sr = ColorMath.lerp(pr, cr, toothMix);
+                float sg = ColorMath.lerp(pg, cg, toothMix);
+                float sb = ColorMath.lerp(pb, cb, toothMix);
+
+                // 2. Diagonal colored-pencil cross-hatching in mid-tones & shadows
+                if (z0 < 250f) {
+                    float diag1 = (float) Math.sin((x + y) * 0.95f + (paperCoarse - 0.5f) * 2.2f);
+                    float diag2 = (float) Math.sin((x - y) * 0.95f + (paperFine - 0.5f) * 2.0f);
+                    float stroke1 = ColorMath.smoothstep(0.55f, 0.92f, diag1) * (1f - ColorMath.smoothstep(0.28f, 0.68f, lum));
+                    float stroke2 = ColorMath.smoothstep(0.62f, 0.94f, diag2) * (1f - ColorMath.smoothstep(0.10f, 0.38f, lum));
+                    float hatch = ColorMath.clamp(stroke1 * 0.36f + stroke2 * 0.32f, 0f, 0.52f);
+                    float hr = ColorMath.lerp(0.16f, pr * 0.42f, 0.55f);
+                    float hg = ColorMath.lerp(0.14f, pg * 0.42f, 0.55f);
+                    float hb = ColorMath.lerp(0.18f, pb * 0.42f, 0.55f);
+                    sr = ColorMath.lerp(sr, hr, hatch);
+                    sg = ColorMath.lerp(sg, hg, hatch);
+                    sb = ColorMath.lerp(sb, hb, hatch);
+                }
+
+                // 3. Hand-drawn graphite silhouette outlines
+                float maxCurv = 0f, maxStep = 0f;
+                for (int[] off : offsets) {
+                    int x1 = Math.max(0, Math.min(w - 1, x + off[0]));
+                    int y1 = Math.max(0, Math.min(h - 1, y + off[1]));
+                    int x2 = Math.max(0, Math.min(w - 1, x - off[0]));
+                    int y2 = Math.max(0, Math.min(h - 1, y - off[1]));
+                    float za = depthBuf[y1 * w + x1];
+                    float zb = depthBuf[y2 * w + x2];
+                    float curv = Math.abs(2f * z0 - (za + zb)) / Math.max(z0, 1f);
+                    float stepA = Math.abs(za - z0) / Math.max(Math.min(za, z0), 1f);
+                    float stepB = Math.abs(zb - z0) / Math.max(Math.min(zb, z0), 1f);
+                    maxCurv = Math.max(maxCurv, curv);
+                    maxStep = Math.max(maxStep, Math.max(stepA, stepB));
+                }
+                float distFade = 1f - ColorMath.smoothstep(140f, 250f, z0);
+                float lineWeight = 0.72f + 0.28f * paperFine;
+                float depthPencil = Math.max(
+                        ColorMath.smoothstep(0.058f, 0.15f, maxCurv),
+                        ColorMath.smoothstep(0.14f, 0.30f, maxStep)
+                ) * distFade * lineWeight;
+
+                float cloudPencil = 0f;
+                if (z0 >= 250f) {
+                    int xm = Math.max(0, x - 1), xp = Math.min(w - 1, x + 1);
+                    int ym = Math.max(0, y - 1), yp = Math.min(h - 1, y + 1);
+                    float grad = Math.abs(lumBuf[y * w + xp] - lumBuf[y * w + xm])
+                               + Math.abs(lumBuf[yp * w + x] - lumBuf[ym * w + x]);
+                    cloudPencil = ColorMath.smoothstep(0.07f, 0.17f, grad) * 0.48f * lineWeight;
+                }
+
+                float outline = ColorMath.clamp(Math.max(depthPencil, cloudPencil), 0f, 0.80f);
+                sr = ColorMath.lerp(sr, 0.15f, outline);
+                sg = ColorMath.lerp(sg, 0.13f, outline);
+                sb = ColorMath.lerp(sb, 0.17f, outline);
+                dst[idx] = ColorMath.packRgb(sr, sg, sb);
+            }
+        });
+        img.setRGB(0, 0, w, h, dst, 0, w);
+    }
+
+    /**
+     * Exact mirror of anima:post/blueprint (textureless Prussian-blue architectural cyanotype + drafting grid + white linework).
+     */
+    private static void applyBlueprintPostPass(BufferedImage img, float[] depthBuf) {
+        int w = img.getWidth(), h = img.getHeight();
+        int[] src = img.getRGB(0, 0, w, h, null, 0, w);
+        int[] dst = new int[w * h];
+        float[] lumBuf = new float[w * h];
+        for (int i = 0; i < src.length; i++) {
+            float r = ((src[i] >> 16) & 0xFF) / 255f;
+            float g = ((src[i] >> 8) & 0xFF) / 255f;
+            float b = (src[i] & 0xFF) / 255f;
+            lumBuf[i] = 0.2126f * r + 0.7152f * g + 0.0722f * b;
+        }
+        int[][] offsets = {{1, 0}, {0, 1}, {1, 1}, {-1, 1}};
+        IntStream.range(0, h).parallel().forEach(y -> {
+            float uvY = (y + 0.5f) / h;
+            for (int x = 0; x < w; x++) {
+                int idx = y * w + x;
+                float uvX = (x + 0.5f) / w;
+                float lum = lumBuf[idx];
+                float z0 = depthBuf[idx];
+
+                // 1. Prussian-blue cyanotype paper with subtle drafting vignette
+                float vx = uvX * 2f - 1f, vy = uvY * 2f - 1f;
+                float vig = ColorMath.clamp(1f - (vx * vx + vy * vy) * 0.16f, 0.72f, 1f);
+                float grain = (hash21((float) Math.floor(x * 0.5f), (float) Math.floor(y * 0.5f)) - 0.5f) * 0.025f;
+
+                float pr, pg, pb;
+                if (z0 >= 250f) {
+                    float t = ColorMath.clamp01(uvY);
+                    pr = ColorMath.lerp(0.065f, 0.095f * 0.92f, t);
+                    pg = ColorMath.lerp(0.235f, 0.305f * 0.92f, t);
+                    pb = ColorMath.lerp(0.510f, 0.625f * 0.92f, t);
+                } else {
+                    float t = ColorMath.smoothstep(0.08f, 0.90f, lum);
+                    pr = ColorMath.lerp(0.055f, 0.095f, t);
+                    pg = ColorMath.lerp(0.195f, 0.305f, t);
+                    pb = ColorMath.lerp(0.445f, 0.625f, t);
+                }
+                pr = ColorMath.clamp01(pr * vig + grain);
+                pg = ColorMath.clamp01(pg * vig + grain);
+                pb = ColorMath.clamp01(pb * vig + grain);
+
+                // 2. Crisp technical drafting grid (minor 24px + major 120px)
+                float mx = Math.abs(((x / 24f + 0.5f) % 1f) - 0.5f) * 24f;
+                float my = Math.abs(((y / 24f + 0.5f) % 1f) - 0.5f) * 24f;
+                float Mx = Math.abs(((x / 120f + 0.5f) % 1f) - 0.5f) * 120f;
+                float My = Math.abs(((y / 120f + 0.5f) % 1f) - 0.5f) * 120f;
+                float minorLine = (1f - ColorMath.smoothstep(0.4f, 1.1f, Math.min(mx, my))) * 0.11f;
+                float majorLine = (1f - ColorMath.smoothstep(0.5f, 1.4f, Math.min(Mx, My))) * 0.22f;
+                float grid = ColorMath.clamp(Math.max(minorLine, majorLine), 0f, 0.28f);
+                pr = ColorMath.lerp(pr, 0.45f, grid);
+                pg = ColorMath.lerp(pg, 0.76f, grid);
+                pb = ColorMath.lerp(pb, 1.00f, grid);
+
+                // 3. Architectural white diagonal hatching in shaded geometry
+                if (z0 < 250f) {
+                    float h1 = ColorMath.smoothstep(0.68f, 0.94f, (float) Math.sin((x + y) * 0.85f)) * (1f - ColorMath.smoothstep(0.22f, 0.58f, lum));
+                    float h2 = ColorMath.smoothstep(0.72f, 0.96f, (float) Math.sin((x - y) * 0.85f)) * (1f - ColorMath.smoothstep(0.08f, 0.28f, lum));
+                    float hatch = ColorMath.clamp(h1 * 0.24f + h2 * 0.20f, 0f, 0.38f);
+                    pr = ColorMath.lerp(pr, 0.78f, hatch);
+                    pg = ColorMath.lerp(pg, 0.92f, hatch);
+                    pb = ColorMath.lerp(pb, 1.00f, hatch);
+                }
+
+                // 4. Crisp bright-white technical linework
+                float maxCurv = 0f, maxStep = 0f;
+                for (int[] off : offsets) {
+                    int x1 = Math.max(0, Math.min(w - 1, x + off[0]));
+                    int y1 = Math.max(0, Math.min(h - 1, y + off[1]));
+                    int x2 = Math.max(0, Math.min(w - 1, x - off[0]));
+                    int y2 = Math.max(0, Math.min(h - 1, y - off[1]));
+                    float za = depthBuf[y1 * w + x1];
+                    float zb = depthBuf[y2 * w + x2];
+                    float curv = Math.abs(2f * z0 - (za + zb)) / Math.max(z0, 1f);
+                    float stepA = Math.abs(za - z0) / Math.max(Math.min(za, z0), 1f);
+                    float stepB = Math.abs(zb - z0) / Math.max(Math.min(zb, z0), 1f);
+                    maxCurv = Math.max(maxCurv, curv);
+                    maxStep = Math.max(maxStep, Math.max(stepA, stepB));
+                }
+                float distFade = 1f - ColorMath.smoothstep(140f, 250f, z0);
+                float depthLine = Math.max(
+                        ColorMath.smoothstep(0.050f, 0.135f, maxCurv),
+                        ColorMath.smoothstep(0.13f, 0.28f, maxStep)
+                ) * distFade;
+
+                float cloudLine = 0f;
+                if (z0 >= 250f) {
+                    int xm = Math.max(0, x - 1), xp = Math.min(w - 1, x + 1);
+                    int ym = Math.max(0, y - 1), yp = Math.min(h - 1, y + 1);
+                    float grad = Math.abs(lumBuf[y * w + xp] - lumBuf[y * w + xm])
+                               + Math.abs(lumBuf[yp * w + x] - lumBuf[ym * w + x]);
+                    cloudLine = ColorMath.smoothstep(0.065f, 0.16f, grad) * 0.65f;
+                }
+
+                float whiteInk = ColorMath.clamp(Math.max(depthLine, cloudLine), 0f, 0.95f);
+                pr = ColorMath.lerp(pr, 0.92f, whiteInk);
+                pg = ColorMath.lerp(pg, 0.97f, whiteInk);
+                pb = ColorMath.lerp(pb, 1.00f, whiteInk);
+                dst[idx] = ColorMath.packRgb(pr, pg, pb);
+            }
+        });
+        img.setRGB(0, 0, w, h, dst, 0, w);
+    }
     private static void applyLushBloomPostPass(BufferedImage img) {
         int w = img.getWidth(), h = img.getHeight();
         int[] src = img.getRGB(0, 0, w, h, null, 0, w);

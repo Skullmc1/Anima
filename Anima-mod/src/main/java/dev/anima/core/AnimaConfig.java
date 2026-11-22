@@ -15,7 +15,9 @@ public final class AnimaConfig {
     public enum Preset {
         VANILLA("Off", "Vanilla"),
         LUSH("Lush", "Cinematic"),
-        BORDERLANDS("Borderlands", "Cel-Shaded");
+        BORDERLANDS("Borderlands", "Cel-Shaded"),
+        COLOR_PENCIL("Color Pencil", "Sketch"),
+        BLUEPRINT("Blueprint", "Technical");
 
         private final String displayName;
         private final String subtitle;
@@ -131,6 +133,40 @@ public final class AnimaConfig {
                 filmicStrength = 0.45f;
                 torchFlicker = 0.25f;
             }
+            case COLOR_PENCIL -> {
+                enabled = true;
+                atmosphericLightmap = true;
+                skyEnhancement = true;
+                atmosphericFog = true;
+                waterEnhancement = true;
+                directionalShading = true;
+                foliageEnhancement = true;
+                dynamicHandheldLight = true;
+                warmthStrength = 1.02f;
+                shadowDepth = 0.85f;
+                fogDensity = 0.40f;
+                waterClarity = 0.85f;
+                saturationBoost = 1.18f;
+                filmicStrength = 0.35f;
+                torchFlicker = 0.20f;
+            }
+            case BLUEPRINT -> {
+                enabled = true;
+                atmosphericLightmap = true;
+                skyEnhancement = false;
+                atmosphericFog = false;
+                waterEnhancement = false;
+                directionalShading = false;
+                foliageEnhancement = false;
+                dynamicHandheldLight = true;
+                warmthStrength = 0.50f;
+                shadowDepth = 0.70f;
+                fogDensity = 0.20f;
+                waterClarity = 0.50f;
+                saturationBoost = 1.0f;
+                filmicStrength = 0.20f;
+                torchFlicker = 0.15f;
+            }
         }
     }
 
@@ -142,15 +178,20 @@ public final class AnimaConfig {
         return enabled && preset == Preset.BORDERLANDS;
     }
 
-    /**
-     * Encodes the active visual mode into a fractional float for FogData.environmentalEnd:
-     * 0.00 = Off, 0.35 = Lush, 0.75 = Borderlands.
-     */
+    public boolean isColorPencil() {
+        return enabled && preset == Preset.COLOR_PENCIL;
+    }
+
+    public boolean isBlueprint() {
+        return enabled && preset == Preset.BLUEPRINT;
+    }
+
     public float gpuModeFraction() {
         if (!isActive()) return 0.0f;
         return switch (preset) {
-            case LUSH -> 0.35f;
+            case LUSH, COLOR_PENCIL -> 0.35f;
             case BORDERLANDS -> 0.75f;
+            case BLUEPRINT -> 0.0f;
             default -> 0.0f;
         };
     }
@@ -164,11 +205,9 @@ public final class AnimaConfig {
         try (InputStream in = Files.newInputStream(path)) {
             props.load(in);
             String pName = props.getProperty("preset", Preset.LUSH.name()).toUpperCase();
-            if ("VANILLA".equals(pName)) {
-                applyPreset(Preset.VANILLA);
-            } else if ("BORDERLANDS".equals(pName)) {
-                applyPreset(Preset.BORDERLANDS);
-            } else {
+            try {
+                applyPreset(Preset.valueOf(pName));
+            } catch (IllegalArgumentException ignored) {
                 applyPreset(Preset.LUSH);
             }
             enabled = Boolean.parseBoolean(props.getProperty("enabled", String.valueOf(enabled)));

@@ -21,6 +21,6 @@ public abstract class PauseScreenMixin extends Screen {
 
     @Inject(method = "init", at = @At("TAIL"))
     private void anima$addCustomDropdown(CallbackInfo ci) {
-        this.addRenderableWidget(new AnimaDropdownWidget(12, this.height - 34, 172, 24));
+        this.addRenderableWidget(new AnimaDropdownWidget(12, this.height - 34, 186, 24));
     }
 }

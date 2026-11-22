@@ -131,6 +131,31 @@ public final class AnimaRendererMain {
         ImageIO.write(modeSheet, "png", modePath.toFile());
         System.out.println("[Anima-renderer] Saved Borderlands showcase -> " + modePath.toAbsolutePath());
 
+        // 3-Way Sketch Showcase: Vanilla 26.2 vs Anima v0.14.0 Color Pencil vs Anima v0.14.0 Blueprint
+        AnimaConfig colorPencilCfg = AnimaConfig.forPreset(AnimaConfig.Preset.COLOR_PENCIL);
+        AnimaConfig blueprintCfg = AnimaConfig.forPreset(AnimaConfig.Preset.BLUEPRINT);
+        BufferedImage mPencil = renderer.render(mw, mh, camX, camY, camZ, lookX, lookY, lookZ, fov, modeAtm, colorPencilCfg, 2.5f);
+        BufferedImage mBlue = renderer.render(mw, mh, camX, camY, camZ, lookX, lookY, lookZ, fov, modeAtm, blueprintCfg, 2.5f);
+
+        BufferedImage sketchSheet = new BufferedImage(mw * 3 + pad * 4, mh + pad * 2 + headerH, BufferedImage.TYPE_INT_RGB);
+        Graphics2D sg = sketchSheet.createGraphics();
+        sg.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        sg.setColor(new Color(18, 20, 26));
+        sg.fillRect(0, 0, sketchSheet.getWidth(), sketchSheet.getHeight());
+        sg.setFont(new Font("SansSerif", Font.BOLD, 20));
+        sg.setColor(new Color(235, 240, 248));
+        sg.drawString("SKETCH SHOWCASE: Vanilla 26.2  vs  Anima v0.14.0 Color Pencil  vs  Anima v0.14.0 Blueprint", pad + 6, 30);
+        sg.drawImage(mVan, pad, headerH + pad, null);
+        sg.drawImage(mPencil, pad * 2 + mw, headerH + pad, null);
+        sg.drawImage(mBlue, pad * 3 + mw * 2, headerH + pad, null);
+        drawBadge(sg, pad + 12, headerH + pad + 12, "VANILLA 26.2", new Color(25, 28, 35, 195), Color.WHITE);
+        drawBadge(sg, pad * 2 + mw + 12, headerH + pad + 12, "ANIMA v0.14.0 — Color Pencil", new Color(68, 26, 48, 220), new Color(249, 168, 212));
+        drawBadge(sg, pad * 3 + mw * 2 + 12, headerH + pad + 12, "ANIMA v0.14.0 — Blueprint", new Color(14, 38, 76, 225), new Color(147, 197, 253));
+        sg.dispose();
+        Path sketchPath = outDir.resolve("sketch_showcase.png");
+        ImageIO.write(sketchSheet, "png", sketchPath.toFile());
+        System.out.println("[Anima-renderer] Saved Sketch showcase -> " + sketchPath.toAbsolutePath());
+
         // Optional 3-way Shader Pack Benchmark: Vanilla vs Anima v0.6.0 vs Iris/OptiFine Shader Pack (.zip)
         Path shaderZip = null;
         String shaderName = null;

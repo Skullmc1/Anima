@@ -37,9 +37,11 @@ public final class AnimaDropdownWidget extends AbstractWidget {
 
     private static int accentColor(AnimaConfig.Preset preset) {
         return switch (preset) {
-            case VANILLA -> 0xFF64748B;     // Slate gray
-            case LUSH -> 0xFF38BDF8;        // Crisp cyan-sky
-            case BORDERLANDS -> 0xFFF59E0B; // Vibrant Borderlands amber-gold
+            case VANILLA -> 0xFF64748B;      // Slate gray
+            case LUSH -> 0xFF38BDF8;         // Crisp cyan-sky
+            case BORDERLANDS -> 0xFFF59E0B;  // Vibrant Borderlands amber-gold
+            case COLOR_PENCIL -> 0xFFF472B6; // Sketchbook coral-pink
+            case BLUEPRINT -> 0xFF60A5FA;    // Technical blueprint blue
         };
     }
 
