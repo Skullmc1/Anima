@@ -98,6 +98,12 @@ public final class AnimaRendererMain {
         AnimaAtmosphere goldenAtm = new AnimaAtmosphere(11350f, 0f);
         AnimaConfig.Preset[] presets = AnimaConfig.Preset.values();
         int pw = 640, ph = 360;
+
+        // Warm up JIT across presets so displayed timings accurately reflect steady-state cost
+        for (AnimaConfig.Preset p : presets) {
+            renderer.render(160, 90, camX, camY, camZ, lookX, lookY, lookZ, fov, goldenAtm, AnimaConfig.forPreset(p), 2.5f);
+        }
+
         BufferedImage presetSheet = new BufferedImage(pw * 2 + pad * 3, ph * 2 + pad * 3 + headerH, BufferedImage.TYPE_INT_RGB);
         Graphics2D pg = presetSheet.createGraphics();
         pg.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
