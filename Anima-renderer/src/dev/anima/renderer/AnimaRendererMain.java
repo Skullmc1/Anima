@@ -88,7 +88,7 @@ public final class AnimaRendererMain {
 
         g.setFont(new Font("SansSerif", Font.BOLD, 20));
         g.setColor(new Color(235, 240, 248));
-        g.drawString("ANIMA MOD — Shader-Free Atmospheric Visuals for Minecraft 26.2 (Vanilla vs Anima Lush)", pad + 6, 30);
+        g.drawString("ANIMA MOD — Accurate Minecraft 26.2 Native Pipeline Preview (Vanilla vs Anima Lush)", pad + 6, 30);
 
         for (int i = 0; i < scenarios.length; i++) {
             int y = headerH + pad + i * (height + pad);

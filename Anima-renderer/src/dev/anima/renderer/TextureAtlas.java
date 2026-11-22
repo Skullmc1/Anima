@@ -28,6 +28,7 @@ public final class TextureAtlas {
     // Authentic Minecraft Plains biome tint colors
     private static final int PLAINS_GRASS_TINT = 0x91BD59;
     private static final int PLAINS_FOLIAGE_TINT = 0x77AB2F;
+    private static final int PLAINS_WATER_TINT = 0x3F76E4;
 
     private final int[] grassTop = new int[SIZE * SIZE];
     private final int[] grassSide = new int[SIZE * SIZE];
@@ -44,6 +45,7 @@ public final class TextureAtlas {
     private final int[] poppy = new int[SIZE * SIZE];
     private final int[] dandelion = new int[SIZE * SIZE];
     private final int[] torchTex = new int[SIZE * SIZE];
+    private final int[] waterStill = new int[SIZE * SIZE];
 
     public final boolean loadedRealTextures;
     public final String textureSource;
@@ -71,6 +73,7 @@ public final class TextureAtlas {
             loadDirect(zip, "assets/minecraft/textures/block/poppy.png", poppy);
             loadDirect(zip, "assets/minecraft/textures/block/dandelion.png", dandelion);
             loadDirect(zip, "assets/minecraft/textures/block/torch.png", torchTex);
+            loadDirect(zip, "assets/minecraft/textures/block/water_still.png", waterStill);
         }
 
         this.loadedRealTextures = true;
@@ -215,6 +218,25 @@ public final class TextureAtlas {
             return (a << 24) | enhanced;
         }
         return argb;
+    }
+
+    /**
+     * Samples Minecraft 26.2's real water_still.png tinted by BiomeColors.getAverageWaterColor
+     * (enhanced by AnimaWaterEngine.enhanceBiomeWaterColor when Anima is enabled).
+     */
+    public void sampleWater(float u, float v, AnimaAtmosphere atm, AnimaConfig config, float[] outRgb) {
+        int tx = Math.max(0, Math.min(SIZE - 1, (int) (u * SIZE)));
+        int ty = Math.max(0, Math.min(SIZE - 1, (int) ((1f - v) * SIZE)));
+        int texel = waterStill[ty * SIZE + tx];
+
+        int waterTint = dev.anima.core.AnimaWaterEngine.enhanceBiomeWaterColor(PLAINS_WATER_TINT, atm, config);
+        float tr = ((waterTint >> 16) & 0xFF) / 255f;
+        float tg = ((waterTint >> 8) & 0xFF) / 255f;
+        float tb = (waterTint & 0xFF) / 255f;
+
+        outRgb[0] = (((texel >> 16) & 0xFF) / 255f) * tr;
+        outRgb[1] = (((texel >> 8) & 0xFF) / 255f) * tg;
+        outRgb[2] = ((texel & 0xFF) / 255f) * tb;
     }
 
     public static void unpackRgba(int argb, float[] outRgb) {

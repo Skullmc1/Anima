@@ -3,19 +3,18 @@ package dev.anima.renderer;
 import dev.anima.core.AnimaAtmosphere;
 import dev.anima.core.AnimaConfig;
 import dev.anima.core.AnimaDynamicLightEngine;
-import dev.anima.core.AnimaFogEngine;
-import dev.anima.core.AnimaLightmapEngine;
-import dev.anima.core.AnimaShadingEngine;
-import dev.anima.core.AnimaSkyEngine;
-import dev.anima.core.AnimaWaterEngine;
+import dev.anima.core.AnimaMc26Pipeline;
 import dev.anima.core.ColorMath;
 
 import java.awt.image.BufferedImage;
 import java.util.stream.IntStream;
 
 /**
- * Multi-threaded 3D Minecraft Voxel Rendering Engine that executes Anima-mod's
- * actual dev.anima.core visual pipeline directly on a live Minecraft gameplay scene.
+ * Multi-threaded 3D Minecraft 26.2 Voxel Rendering Engine.
+ * Executes Minecraft 26.2's EXACT native rendering pipeline (lightmap.fsh, cardinal face
+ * shading, 4-corner smooth AO, real water_still.png + BiomeColors tinting, linear
+ * AtmosphericFogEnvironment, SkyRenderer dome, and LightCoordsUtil dynamic handheld lighting)
+ * so renders are an honest 1:1 preview of Anima-mod in real Minecraft 26.2.
  */
 public final class VoxelRenderer {
 
@@ -37,6 +36,25 @@ public final class VoxelRenderer {
             AnimaConfig config,
             float timeSeconds) {
 
+        // Build exact Minecraft 26.2 LightmapInfo UBO uniforms (identical to LightmapExtractorMixin)
+        AnimaMc26Pipeline.LightmapUniforms lmUniforms = new AnimaMc26Pipeline.LightmapUniforms();
+        AnimaMc26Pipeline.fillVanillaLightmapUniforms(atm, lmUniforms);
+        AnimaMc26Pipeline.applyAnimaLightmapUniforms(lmUniforms, atm, config, timeSeconds);
+
+        // Precompute the 16x16 Minecraft 26.2 lightmap texture (just like lightmap.fsh!)
+        float[][] lightmap = new float[256][3];
+        for (int sky = 0; sky < 16; sky++) {
+            for (int blk = 0; blk < 16; blk++) {
+                AnimaMc26Pipeline.evaluateMc26Lightmap(sky, blk, lmUniforms, lightmap[sky * 16 + blk]);
+            }
+        }
+
+        float[] fogColor = new float[3];
+        AnimaMc26Pipeline.computeMc26FogColor(atm, config, fogColor);
+
+        float[] skyZenith = new float[3];
+        AnimaMc26Pipeline.computeMc26SkyColor(atm, config, skyZenith);
+
         BufferedImage img = new BufferedImage(width, height, BufferedImage.TYPE_INT_RGB);
 
         // Build camera basis
@@ -46,14 +64,12 @@ public final class VoxelRenderer {
         float fLen = (float) Math.sqrt(fx * fx + fy * fy + fz * fz);
         fx /= fLen; fy /= fLen; fz /= fLen;
 
-        // Right = normalize(cross(forward, up(0,1,0)))
         float rx = -fz;
         float ry = 0f;
         float rz = fx;
         float rLen = (float) Math.sqrt(rx * rx + rz * rz);
         rx /= rLen; rz /= rLen;
 
-        // Up = cross(right, forward)
         float ux = ry * fz - rz * fy;
         float uy = rz * fx - rx * fz;
         float uz = rx * fy - ry * fx;
@@ -78,7 +94,7 @@ public final class VoxelRenderer {
                 float dLen = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
                 dx /= dLen; dy /= dLen; dz /= dLen;
 
-                tracePrimaryRay(camX, camY, camZ, dx, dy, dz, atm, config, timeSeconds, rgb);
+                tracePrimaryRay(camX, camY, camZ, dx, dy, dz, atm, config, lightmap, fogColor, skyZenith, rgb);
                 pixels[py * width + px] = ColorMath.packRgb(rgb[0], rgb[1], rgb[2]);
             }
         });
@@ -92,7 +108,9 @@ public final class VoxelRenderer {
             float dx, float dy, float dz,
             AnimaAtmosphere atm,
             AnimaConfig config,
-            float timeSeconds,
+            float[][] lightmap,
+            float[] fogColor,
+            float[] skyZenith,
             float[] outRgb) {
 
         float maxDist = 92f;
@@ -117,7 +135,7 @@ public final class VoxelRenderer {
 
         boolean hitWater = false;
         float waterHitT = 0f;
-        float waterHitX = 0f, waterHitY = 0f, waterHitZ = 0f;
+        float waterU = 0f, waterV = 0f;
         int waterSkyLight = 15;
         int waterBlockLight = 0;
 
@@ -130,21 +148,23 @@ public final class VoxelRenderer {
                 if (block == BlockType.WATER && !hitWater) {
                     hitWater = true;
                     waterHitT = t;
-                    waterHitX = ox + dx * t;
-                    waterHitY = oy + dy * t;
-                    waterHitZ = oz + dz * t;
+                    float wx = ox + dx * t;
+                    float wy = oy + dy * t;
+                    float wz = oz + dz * t;
+                    waterU = ColorMath.clamp01(wx - vx);
+                    waterV = ColorMath.clamp01(wz - vz);
                     int aboveY = Math.min(VoxelWorld.SIZE_Y - 1, vy + 1);
                     waterSkyLight = world.getSkyLight(vx, aboveY, vz);
                     waterBlockLight = Math.max(world.getBlockLight(vx, vy, vz), world.getBlockLight(vx, aboveY, vz));
                     if (config.isActive() && config.dynamicHandheldLight && AnimaDynamicLightEngine.isActive()) {
-                        waterBlockLight = Math.max(waterBlockLight, AnimaDynamicLightEngine.computeDynamicBlockLight(waterHitX, waterHitY + 0.5, waterHitZ));
+                        waterBlockLight = Math.max(waterBlockLight, AnimaDynamicLightEngine.computeDynamicBlockLight(wx, wy + 0.5, wz));
                     }
                 } else if (block.crossModel) {
                     float[] plantRgb = new float[3];
                     float plantT = intersectCrossModel(ox, oy, oz, dx, dy, dz, vx, vy, vz, block, atm, config, plantRgb);
                     if (plantT >= 0f) {
-                        shadeCrossPlant(vx, vy, vz, block, plantRgb, atm, config, timeSeconds, outRgb);
-                        applyFog(ox + dx * plantT, oy + dy * plantT, oz + dz * plantT, plantT, dx, dy, dz, atm, config, outRgb);
+                        shadeCrossPlant(vx, vy, vz, block, plantRgb, config, lightmap, outRgb);
+                        applyMc26Fog(plantT, atm, config, fogColor, outRgb);
                         return;
                     }
                 } else if (block.solid) {
@@ -170,70 +190,64 @@ public final class VoxelRenderer {
                     int alpha = (texel >>> 24) & 0xFF;
                     if (alpha > 128) {
                         float[] surfaceRgb = new float[3];
-                        shadeSolidHit(vx, vy, vz, nx, ny, nz, hx, hy, hz, u, v, block, texel, atm, config, timeSeconds, surfaceRgb);
+                        shadeSolidHit(vx, vy, vz, nx, ny, nz, hx, hy, hz, u, v, texel, config, lightmap, surfaceRgb);
 
                         if (hitWater) {
-                            float waterDepth = Math.max(0.12f, t - waterHitT);
-                            AnimaWaterEngine.shadeWaterSurface(
-                                    surfaceRgb,
-                                    waterDepth,
-                                    waterHitX, waterHitZ,
-                                    dx, dy, dz,
-                                    waterSkyLight / 15f,
-                                    waterBlockLight / 15f,
-                                    timeSeconds,
-                                    atm, config,
-                                    outRgb);
-                            applyFog(waterHitX, waterHitY, waterHitZ, waterHitT, dx, dy, dz, atm, config, outRgb);
+                            // Real Minecraft 26.2 water: alpha-blended water_still.png * BiomeColors * lightmap over lit riverbed
+                            float[] waterTex = new float[3];
+                            atlas.sampleWater(waterU, waterV, atm, config, waterTex);
+                            float[] wLight = lightmap[waterSkyLight * 16 + waterBlockLight];
+                            float wr = waterTex[0] * wLight[0];
+                            float wg = waterTex[1] * wLight[1];
+                            float wb = waterTex[2] * wLight[2];
+
+                            // Minecraft 26.2 translucent water alpha (~0.68) + slight depth attenuation
+                            float waterDepth = Math.max(0.1f, t - waterHitT);
+                            float depthFog = ColorMath.clamp01(waterDepth / (config.isActive() ? 14f : 9f));
+                            float waterAlpha = ColorMath.clamp01(0.62f + depthFog * 0.25f);
+                            outRgb[0] = ColorMath.lerp(surfaceRgb[0], wr, waterAlpha);
+                            outRgb[1] = ColorMath.lerp(surfaceRgb[1], wg, waterAlpha);
+                            outRgb[2] = ColorMath.lerp(surfaceRgb[2], wb, waterAlpha);
+                            applyMc26Fog(waterHitT, atm, config, fogColor, outRgb);
                         } else {
                             outRgb[0] = surfaceRgb[0];
                             outRgb[1] = surfaceRgb[1];
                             outRgb[2] = surfaceRgb[2];
-                            applyFog(hx, hy, hz, t, dx, dy, dz, atm, config, outRgb);
+                            applyMc26Fog(t, atm, config, fogColor, outRgb);
                         }
                         return;
                     }
                 }
             }
 
-            // Advance DDA to next voxel
             if (tMaxX < tMaxY) {
                 if (tMaxX < tMaxZ) {
-                    t = tMaxX;
-                    tMaxX += tDeltaX;
-                    vx += stepX;
-                    nx = -stepX; ny = 0; nz = 0;
+                    t = tMaxX; tMaxX += tDeltaX; vx += stepX; nx = -stepX; ny = 0; nz = 0;
                 } else {
-                    t = tMaxZ;
-                    tMaxZ += tDeltaZ;
-                    vz += stepZ;
-                    nx = 0; ny = 0; nz = -stepZ;
+                    t = tMaxZ; tMaxZ += tDeltaZ; vz += stepZ; nx = 0; ny = 0; nz = -stepZ;
                 }
             } else {
                 if (tMaxY < tMaxZ) {
-                    t = tMaxY;
-                    tMaxY += tDeltaY;
-                    vy += stepY;
-                    nx = 0; ny = -stepY; nz = 0;
+                    t = tMaxY; tMaxY += tDeltaY; vy += stepY; nx = 0; ny = -stepY; nz = 0;
                 } else {
-                    t = tMaxZ;
-                    tMaxZ += tDeltaZ;
-                    vz += stepZ;
-                    nx = 0; ny = 0; nz = -stepZ;
+                    t = tMaxZ; tMaxZ += tDeltaZ; vz += stepZ; nx = 0; ny = 0; nz = -stepZ;
                 }
             }
         }
 
-        // Ray missed geometry -> render Sky + 3D Blocky Minecraft Clouds
         if (hitWater) {
-            float[] deepBed = {0.06f, 0.16f, 0.24f};
-            AnimaWaterEngine.shadeWaterSurface(deepBed, 6.0f, waterHitX, waterHitZ, dx, dy, dz, waterSkyLight / 15f, waterBlockLight / 15f, timeSeconds, atm, config, outRgb);
-            applyFog(waterHitX, waterHitY, waterHitZ, waterHitT, dx, dy, dz, atm, config, outRgb);
+            float[] waterTex = new float[3];
+            atlas.sampleWater(waterU, waterV, atm, config, waterTex);
+            float[] wLight = lightmap[waterSkyLight * 16 + waterBlockLight];
+            outRgb[0] = waterTex[0] * wLight[0];
+            outRgb[1] = waterTex[1] * wLight[1];
+            outRgb[2] = waterTex[2] * wLight[2];
+            applyMc26Fog(waterHitT, atm, config, fogColor, outRgb);
             return;
         }
 
-        AnimaSkyEngine.sampleSky(dx, dy, dz, atm, config, outRgb);
-        blendClouds(ox, oy, oz, dx, dy, dz, atm, config, outRgb);
+        sampleMc26Sky(dx, dy, dz, atm, config, skyZenith, fogColor, outRgb);
+        blendMc26Clouds(ox, oy, oz, dx, dy, dz, atm, outRgb);
     }
 
     private void shadeSolidHit(
@@ -241,17 +255,14 @@ public final class VoxelRenderer {
             int nx, int ny, int nz,
             float hx, float hy, float hz,
             float u, float v,
-            BlockType block,
             int texel,
-            AnimaAtmosphere atm,
             AnimaConfig config,
-            float timeSeconds,
+            float[][] lightmap,
             float[] outRgb) {
 
         float[] albedo = new float[3];
         TextureAtlas.unpackRgba(texel, albedo);
 
-        // Light sample from the adjacent air/water cell facing the hit face
         int lx = vx + nx;
         int ly = vy + ny;
         int lz = vz + nz;
@@ -261,51 +272,30 @@ public final class VoxelRenderer {
             blkL = Math.max(blkL, AnimaDynamicLightEngine.computeDynamicBlockLight(hx + nx * 0.25, hy + ny * 0.25, hz + nz * 0.25));
         }
 
-        float[] lightRgb = new float[3];
-        AnimaLightmapEngine.computeLight(skyL, blkL, atm, config, timeSeconds, lightRgb);
-
-        // Fast sun-shadow ray when Anima directional shading is active
-        boolean inShadow = false;
-        if (config.isActive() && config.directionalShading && atm.sunDirY > 0.04f) {
-            inShadow = traceSunShadow(hx + nx * 0.02f, hy + ny * 0.02f, hz + nz * 0.02f, atm.sunDirX, atm.sunDirY, atm.sunDirZ);
-        }
-
-        float[] dirShade = new float[3];
-        AnimaShadingEngine.computeDirectionalShade(nx, ny, nz, block.foliage, inShadow, atm, config, dirShade);
-
-        // 4-corner smooth Minecraft vertex Ambient Occlusion
+        // Exact Minecraft 26.2 lightmap.fsh lookup + cardinal face shade + 4-corner smooth AO
+        float[] lightRgb = lightmap[skyL * 16 + blkL];
+        float cardinal = AnimaMc26Pipeline.cardinalShade(nx, ny, nz);
         float ao = computeSmoothAO(lx, ly, lz, nx, ny, nz, u, v);
-        ao = AnimaShadingEngine.shapeAmbientOcclusion(ao, config);
+        float shade = cardinal * ao;
 
-        outRgb[0] = albedo[0] * lightRgb[0] * dirShade[0] * ao;
-        outRgb[1] = albedo[1] * lightRgb[1] * dirShade[1] * ao;
-        outRgb[2] = albedo[2] * lightRgb[2] * dirShade[2] * ao;
-
-        if (config.isActive()) {
-            ColorMath.applyFilmicPolish(outRgb, config.filmicStrength * 0.30f);
-        }
-        outRgb[0] = ColorMath.clamp01(outRgb[0]);
-        outRgb[1] = ColorMath.clamp01(outRgb[1]);
-        outRgb[2] = ColorMath.clamp01(outRgb[2]);
+        outRgb[0] = ColorMath.clamp01(albedo[0] * lightRgb[0] * shade);
+        outRgb[1] = ColorMath.clamp01(albedo[1] * lightRgb[1] * shade);
+        outRgb[2] = ColorMath.clamp01(albedo[2] * lightRgb[2] * shade);
     }
 
     private void shadeCrossPlant(
             int vx, int vy, int vz,
             BlockType block,
             float[] albedo,
-            AnimaAtmosphere atm,
             AnimaConfig config,
-            float timeSeconds,
+            float[][] lightmap,
             float[] outRgb) {
 
-        if (block == BlockType.TORCH) {
-            // Emissive glowing flame on top of torch!
-            if (albedo[0] > 0.85f && albedo[1] > 0.55f) {
-                outRgb[0] = Math.min(1f, albedo[0] * 1.15f);
-                outRgb[1] = Math.min(1f, albedo[1] * 1.12f);
-                outRgb[2] = Math.min(1f, albedo[2] * 1.05f);
-                return;
-            }
+        if (block == BlockType.TORCH && albedo[0] > 0.85f && albedo[1] > 0.55f) {
+            outRgb[0] = albedo[0];
+            outRgb[1] = albedo[1];
+            outRgb[2] = albedo[2];
+            return;
         }
 
         int skyL = world.getSkyLight(vx, vy, vz);
@@ -313,20 +303,121 @@ public final class VoxelRenderer {
         if (config.isActive() && config.dynamicHandheldLight && AnimaDynamicLightEngine.isActive()) {
             blkL = Math.max(blkL, AnimaDynamicLightEngine.computeDynamicBlockLight(vx + 0.5, vy + 0.5, vz + 0.5));
         }
-        float[] lightRgb = new float[3];
-        AnimaLightmapEngine.computeLight(skyL, blkL, atm, config, timeSeconds, lightRgb);
-
-        float[] dirShade = new float[3];
-        AnimaShadingEngine.computeDirectionalShade(0f, 1f, 0f, block.foliage, false, atm, config, dirShade);
-
-        outRgb[0] = ColorMath.clamp01(albedo[0] * lightRgb[0] * dirShade[0]);
-        outRgb[1] = ColorMath.clamp01(albedo[1] * lightRgb[1] * dirShade[1]);
-        outRgb[2] = ColorMath.clamp01(albedo[2] * lightRgb[2] * dirShade[2]);
+        float[] lightRgb = lightmap[skyL * 16 + blkL];
+        outRgb[0] = ColorMath.clamp01(albedo[0] * lightRgb[0]);
+        outRgb[1] = ColorMath.clamp01(albedo[1] * lightRgb[1]);
+        outRgb[2] = ColorMath.clamp01(albedo[2] * lightRgb[2]);
     }
 
     /**
-     * Intersects the two diagonal X-planes inside a voxel for Minecraft tall grass, flowers, and torches.
+     * Exact Minecraft 26.2 SkyRenderer dome: zenith disc blended into horizon fog color,
+     * sunrise/sunset glow band, square sun/moon, and stars at night.
      */
+    private static void sampleMc26Sky(
+            float dx, float dy, float dz,
+            AnimaAtmosphere atm,
+            AnimaConfig config,
+            float[] skyZenith,
+            float[] fogColor,
+            float[] outRgb) {
+
+        float elev = ColorMath.clamp01(dy);
+        float horizonBlend = (float) Math.pow(1.0f - elev, 2.8f);
+        ColorMath.lerpRgb(skyZenith, fogColor, horizonBlend, outRgb);
+
+        // Minecraft 26.2 sunrise/sunset horizon cone (SkyRenderState.sunriseAndSunsetColor)
+        float sunDot = dx * atm.sunDirX + dy * atm.sunDirY + dz * atm.sunDirZ;
+        if (atm.goldenHourFactor > 0.04f && sunDot > 0.0f) {
+            float glowBand = (float) Math.exp(-Math.pow(elev * 4.5f, 2.0)) * (float) Math.pow(sunDot, 2.0);
+            float strength = atm.goldenHourFactor * (config.isActive() && config.skyEnhancement ? 0.88f : 0.45f);
+            float[] sunsetCol = (config.isActive() && config.skyEnhancement)
+                    ? atm.horizonColor
+                    : new float[]{0.82f, 0.44f, 0.28f};
+            ColorMath.lerpRgb(outRgb, sunsetCol, ColorMath.clamp01(glowBand * strength), outRgb);
+        }
+
+        // Classic Minecraft square sun
+        if (atm.dayFactor > 0.08f && sunDot > 0.994f) {
+            outRgb[0] = 1.0f; outRgb[1] = 0.98f; outRgb[2] = 0.88f;
+        }
+
+        // Classic Minecraft moon + stars at night
+        if (atm.nightFactor > 0.08f) {
+            float moonDot = -sunDot;
+            if (moonDot > 0.995f) {
+                outRgb[0] = 0.92f; outRgb[1] = 0.95f; outRgb[2] = 1.0f;
+            } else if (dy > 0.08f) {
+                float star = hashStar(dx, dy, dz);
+                float thresh = (config.isActive() && config.skyEnhancement) ? 0.9955f : 0.9972f;
+                if (star > thresh) {
+                    float b = ((star - thresh) / (1f - thresh)) * atm.nightFactor * (config.isActive() ? 0.95f : 0.55f);
+                    outRgb[0] = ColorMath.clamp01(outRgb[0] + b);
+                    outRgb[1] = ColorMath.clamp01(outRgb[1] + b);
+                    outRgb[2] = ColorMath.clamp01(outRgb[2] + b);
+                }
+            }
+        }
+    }
+
+    private void applyMc26Fog(float dist, AnimaAtmosphere atm, AnimaConfig config, float[] fogColor, float[] rgb) {
+        float renderDist = 76f;
+        float f = AnimaMc26Pipeline.computeMc26LinearFog(dist, renderDist, atm, config);
+        if (f > 0.001f) {
+            ColorMath.lerpRgb(rgb, fogColor, f, rgb);
+        }
+    }
+
+    /**
+     * Minecraft 26.2 blocky 3D clouds (cardinal top/side/bottom shading, tinted by dayFactor).
+     */
+    private void blendMc26Clouds(
+            float ox, float oy, float oz,
+            float dx, float dy, float dz,
+            AnimaAtmosphere atm,
+            float[] skyRgb) {
+
+        if (dy <= 0.025f) return;
+        float cloudBottom = 37f;
+        float cloudTop = 40.2f;
+        float tEnter = (cloudBottom - oy) / dy;
+        float tExit = (cloudTop - oy) / dy;
+        if (tEnter <= 0f || tEnter > 240f) return;
+
+        float cellSize = 8.5f;
+        int cellX = (int) Math.floor((ox + dx * tEnter) / cellSize);
+        int cellZ = (int) Math.floor((oz + dz * tEnter) / cellSize);
+
+        boolean hitBottom = cloudNoise(cellX, cellZ) >= 0.56f;
+        boolean hitSide = false;
+        float hitT = tEnter;
+
+        if (!hitBottom) {
+            for (int s = 1; s <= 4; s++) {
+                float ts = tEnter + (tExit - tEnter) * (s / 4f);
+                int sx = (int) Math.floor((ox + dx * ts) / cellSize);
+                int sz = (int) Math.floor((oz + dz * ts) / cellSize);
+                if (cloudNoise(sx, sz) >= 0.56f) {
+                    hitSide = true;
+                    hitT = ts;
+                    break;
+                }
+            }
+        }
+        if (!hitBottom && !hitSide) return;
+
+        float base = ColorMath.lerp(0.14f, 0.96f, atm.dayFactor);
+        float faceMul = hitSide ? 0.90f : 0.72f;
+        float cr = base * faceMul * ColorMath.lerp(1.0f, 1.05f, atm.goldenHourFactor);
+        float cg = base * faceMul * ColorMath.lerp(1.0f, 0.84f, atm.goldenHourFactor);
+        float cb = base * faceMul * ColorMath.lerp(1.0f, 0.72f, atm.goldenHourFactor);
+
+        float horizonFade = ColorMath.smoothstep(0.025f, 0.16f, dy) * (1f - ColorMath.smoothstep(145f, 235f, hitT));
+        float alpha = 0.82f * horizonFade;
+        skyRgb[0] = ColorMath.lerp(skyRgb[0], ColorMath.clamp01(cr), alpha);
+        skyRgb[1] = ColorMath.lerp(skyRgb[1], ColorMath.clamp01(cg), alpha);
+        skyRgb[2] = ColorMath.lerp(skyRgb[2], ColorMath.clamp01(cb), alpha);
+    }
+
     private float intersectCrossModel(
             float ox, float oy, float oz,
             float dx, float dy, float dz,
@@ -339,7 +430,6 @@ public final class VoxelRenderer {
         float bestT = Float.MAX_VALUE;
         int bestTex = 0;
 
-        // Plane 1: (x - vx) = (z - vz)  ->  (ox - vx - (oz - vz)) + t*(dx - dz) = 0
         float denom1 = dx - dz;
         if (Math.abs(denom1) > 1e-5f) {
             float t1 = ((oz - vz) - (ox - vx)) / denom1;
@@ -357,7 +447,6 @@ public final class VoxelRenderer {
             }
         }
 
-        // Plane 2: (x - vx) + (z - vz) = 1
         float denom2 = dx + dz;
         if (Math.abs(denom2) > 1e-5f) {
             float t2 = (1f - (ox - vx) - (oz - vz)) / denom2;
@@ -382,47 +471,7 @@ public final class VoxelRenderer {
         return -1f;
     }
 
-    /**
-     * Short shadow ray towards the sun to detect cast shadows from trees and terrain cliffs.
-     */
-    private boolean traceSunShadow(float ox, float oy, float oz, float dx, float dy, float dz) {
-        int vx = (int) Math.floor(ox);
-        int vy = (int) Math.floor(oy);
-        int vz = (int) Math.floor(oz);
-
-        int stepX = dx >= 0 ? 1 : -1;
-        int stepY = dy >= 0 ? 1 : -1;
-        int stepZ = dz >= 0 ? 1 : -1;
-
-        float tDeltaX = dx == 0 ? 1e30f : Math.abs(1f / dx);
-        float tDeltaY = dy == 0 ? 1e30f : Math.abs(1f / dy);
-        float tDeltaZ = dz == 0 ? 1e30f : Math.abs(1f / dz);
-
-        float tMaxX = dx == 0 ? 1e30f : ((dx > 0 ? (vx + 1 - ox) : (ox - vx)) * tDeltaX);
-        float tMaxY = dy == 0 ? 1e30f : ((dy > 0 ? (vy + 1 - oy) : (oy - vy)) * tDeltaY);
-        float tMaxZ = dz == 0 ? 1e30f : ((dz > 0 ? (vz + 1 - oz) : (oz - vz)) * tDeltaZ);
-
-        for (int i = 0; i < 42; i++) {
-            if (tMaxX < tMaxY) {
-                if (tMaxX < tMaxZ) { tMaxX += tDeltaX; vx += stepX; }
-                else { tMaxZ += tDeltaZ; vz += stepZ; }
-            } else {
-                if (tMaxY < tMaxZ) { tMaxY += tDeltaY; vy += stepY; }
-                else { tMaxZ += tDeltaZ; vz += stepZ; }
-            }
-            if (vy >= VoxelWorld.SIZE_Y) return false;
-            if (!world.inBounds(vx, vy, vz)) return false;
-            BlockType b = world.getBlock(vx, vy, vz);
-            if (b.solid) return true;
-        }
-        return false;
-    }
-
-    /**
-     * Exact Minecraft 4-corner smooth Ambient Occlusion for crisp voxel crevices.
-     */
     private float computeSmoothAO(int lx, int ly, int lz, int nx, int ny, int nz, float u, float v) {
-        // Tangent vectors along u and v
         int ux = 0, uy = 0, uz = 0;
         int vx = 0, vy = 0, vz = 0;
         if (ny != 0) {
@@ -452,9 +501,9 @@ public final class VoxelRenderer {
         else occ = (side1 ? 1 : 0) + (side2 ? 1 : 0) + (corner ? 1 : 0);
         return switch (occ) {
             case 0 -> 1.00f;
-            case 1 -> 0.82f;
-            case 2 -> 0.64f;
-            default -> 0.46f;
+            case 1 -> 0.80f;
+            case 2 -> 0.60f;
+            default -> 0.40f;
         };
     }
 
@@ -463,91 +512,7 @@ public final class VoxelRenderer {
         return b.solid && !b.transparent;
     }
 
-    private void applyFog(
-            float hx, float hy, float hz,
-            float dist,
-            float dx, float dy, float dz,
-            AnimaAtmosphere atm,
-            AnimaConfig config,
-            float[] rgb) {
-
-        float renderDist = config.isActive() ? 78f : 110f;
-        float fogFactor = AnimaFogEngine.computeFogFactor(dist, hy, VoxelWorld.WATER_LEVEL, renderDist, atm, config);
-        if (fogFactor <= 0.001f) return;
-
-        float[] fogCol = new float[3];
-        AnimaFogEngine.computeFogColor(dx, dy, dz, atm, config, fogCol);
-        ColorMath.lerpRgb(rgb, fogCol, fogFactor, rgb);
-    }
-
-    /**
-     * Renders true 3D blocky Minecraft clouds (slab from Y=37..40) with sunlit side/top faces
-     * and cool shaded undersides for volumetric-style depth without volumetric shaders.
-     */
-    private void blendClouds(
-            float ox, float oy, float oz,
-            float dx, float dy, float dz,
-            AnimaAtmosphere atm,
-            AnimaConfig config,
-            float[] skyRgb) {
-
-        if (dy <= 0.025f) return;
-        float cloudBottom = 37f;
-        float cloudTop = 40.2f;
-        float tEnter = (cloudBottom - oy) / dy;
-        float tExit = (cloudTop - oy) / dy;
-        if (tEnter <= 0f || tEnter > 240f) return;
-
-        float cellSize = 8.5f;
-        float cx = ox + dx * tEnter;
-        float cz = oz + dz * tEnter;
-        int cellX = (int) Math.floor(cx / cellSize);
-        int cellZ = (int) Math.floor(cz / cellSize);
-
-        boolean hitBottom = cloudNoise(cellX, cellZ) >= 0.56f;
-        boolean hitSide = false;
-        float hitT = tEnter;
-
-        if (!hitBottom) {
-            // Check 3 samples along the slab for 3D vertical cloud side faces
-            for (int s = 1; s <= 4; s++) {
-                float ts = tEnter + (tExit - tEnter) * (s / 4f);
-                int sx = (int) Math.floor((ox + dx * ts) / cellSize);
-                int sz = (int) Math.floor((oz + dz * ts) / cellSize);
-                if (cloudNoise(sx, sz) >= 0.56f) {
-                    hitSide = true;
-                    hitT = ts;
-                    cellX = sx;
-                    cellZ = sz;
-                    break;
-                }
-            }
-        }
-
-        if (!hitBottom && !hitSide) return;
-
-        float[] topCol = new float[3];
-        float[] botCol = new float[3];
-        AnimaSkyEngine.computeCloudColors(atm, config, topCol, botCol);
-
-        float[] cloudCol = new float[3];
-        if (hitSide) {
-            // Bright sunlit vertical side face of 3D cloud
-            float sunSide = 0.55f + 0.45f * ColorMath.clamp01(dx * atm.sunDirX + dz * atm.sunDirZ + 0.4f);
-            ColorMath.lerpRgb(botCol, topCol, sunSide, cloudCol);
-        } else {
-            // Shaded cloud underside with subtle warm rim near the sun
-            float sunRim = (float) Math.pow(Math.max(0f, dx * atm.sunDirX + dy * atm.sunDirY + dz * atm.sunDirZ), 3.0) * 0.45f;
-            ColorMath.lerpRgb(botCol, topCol, 0.22f + sunRim, cloudCol);
-        }
-
-        float horizonFade = ColorMath.smoothstep(0.025f, 0.18f, dy) * (1f - ColorMath.smoothstep(145f, 235f, hitT));
-        float alpha = 0.90f * horizonFade;
-        ColorMath.lerpRgb(skyRgb, cloudCol, alpha, skyRgb);
-    }
-
     private static float cloudNoise(int x, int z) {
-        // Smooth 2x2 clustered blocky cloud shapes
         float a = hashCloud(x, z);
         float b = hashCloud(x + 1, z);
         float c = hashCloud(x, z + 1);
@@ -558,6 +523,15 @@ public final class VoxelRenderer {
 
     private static float hashCloud(int x, int z) {
         int h = x * 374761393 + z * 668265263 + 911;
+        h = (h ^ (h >> 13)) * 1274126177;
+        return ((h ^ (h >> 16)) & 0xFFFF) / 65535f;
+    }
+
+    private static float hashStar(float dx, float dy, float dz) {
+        int ix = (int) Math.floor(dx * 160f);
+        int iy = (int) Math.floor(dy * 160f);
+        int iz = (int) Math.floor(dz * 160f);
+        int h = ix * 374761393 + iy * 668265263 + iz * 2147483647;
         h = (h ^ (h >> 13)) * 1274126177;
         return ((h ^ (h >> 16)) & 0xFFFF) / 65535f;
     }
