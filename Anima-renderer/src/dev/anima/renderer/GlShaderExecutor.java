@@ -100,12 +100,13 @@ public final class GlShaderExecutor implements AutoCloseable {
             System.out.println("[Anima-GPU] Vanilla 26.2 terrain.vsh/.fsh GPU compile: " + (vOk && fOk ? "PASS" : "FAIL"));
         }
         if (sodiumJar != null && Files.exists(sodiumJar)) {
+            Path sodRoot = Path.of("..", "Anima-mod", "src", "client", "resources", "resourcepacks", "anima_sodium_shaders", "assets");
             String sodDefs = "#define USE_FOG\n#define USE_FOG_SMOOTH\n#define USE_VERTEX_COMPRESSION\n#define VERT_POS_SCALE 0.000030517578125\n#define VERT_POS_OFFSET -8.0\n#define VERT_TEX_SCALE 0.000030517578125\n#define ALPHA_CUTOUT 0.1\n";
             boolean svOk = tryCompileWithMojImports(
-                    SHADER_ROOT.resolve("sodium/shaders/blocks/block_layer_opaque.vsh"),
+                    sodRoot.resolve("sodium/shaders/blocks/block_layer_opaque.vsh"),
                     GL20.GL_VERTEX_SHADER, mcJar, sodiumJar, sodDefs);
             boolean sfOk = tryCompileWithMojImports(
-                    SHADER_ROOT.resolve("sodium/shaders/blocks/block_layer_opaque.fsh"),
+                    sodRoot.resolve("sodium/shaders/blocks/block_layer_opaque.fsh"),
                     GL20.GL_FRAGMENT_SHADER, mcJar, sodiumJar, sodDefs);
             System.out.println("[Anima-GPU] Sodium 0.9.2 block_layer_opaque.vsh/.fsh GPU compile: " + (svOk && sfOk ? "PASS" : "FAIL"));
         }

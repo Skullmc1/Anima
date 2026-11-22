@@ -41,14 +41,22 @@ public class AnimaClientMod implements ClientModInitializer {
                 KeyMapping.Category.MISC
         ));
 
-        FabricLoader.getInstance().getModContainer(AnimaMod.MOD_ID).ifPresent(container ->
+        FabricLoader.getInstance().getModContainer(AnimaMod.MOD_ID).ifPresent(container -> {
+            ResourceLoader.registerBuiltinPack(
+                    Identifier.fromNamespaceAndPath(AnimaMod.MOD_ID, "anima_shaders"),
+                    container,
+                    Component.literal("Anima Core Shaders"),
+                    PackActivationType.ALWAYS_ENABLED
+            );
+            if (FabricLoader.getInstance().isModLoaded("sodium")) {
                 ResourceLoader.registerBuiltinPack(
-                        Identifier.fromNamespaceAndPath(AnimaMod.MOD_ID, "anima_shaders"),
+                        Identifier.fromNamespaceAndPath(AnimaMod.MOD_ID, "anima_sodium_shaders"),
                         container,
-                        Component.literal("Anima Lush Shaders (Vanilla & Sodium)"),
+                        Component.literal("Anima Sodium Shaders"),
                         PackActivationType.ALWAYS_ENABLED
-                )
-        );
+                );
+            }
+        });
 
         ClientTickEvents.END_CLIENT_TICK.register(AnimaClientMod::onClientTick);
         AnimaMod.LOGGER.info("Anima Lush client pipeline ready (Vanilla & Sodium 26.2, OpenGL & Vulkan compatible)");

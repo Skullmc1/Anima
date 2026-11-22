@@ -1,7 +1,7 @@
 {
   "pack": {
-    "description": "Anima Shaders (Vanilla & Sodium 26.2)",
-    "min_format": 1,
+    "description": "Anima Core Shaders (Vanilla 26.2 & PostChain)",
+    "min_format": 65,
     "max_format": 999
   }
 }
