@@ -1,6 +1,7 @@
 package dev.anima.client.mixin;
 
 import dev.anima.AnimaMod;
+import dev.anima.client.ui.BorderlandsChatLayout;
 import net.minecraft.client.Minecraft;
 import net.minecraft.client.gui.Font;
 import net.minecraft.client.gui.GuiGraphicsExtractor;
@@ -13,12 +14,13 @@ import org.spongepowered.asm.mixin.Unique;
 import org.spongepowered.asm.mixin.injection.At;
 import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfo;
+import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 import java.util.List;
 
 /**
- * Moves Minecraft chat to the bottom-right and wraps it in a stylized Borderlands ECHO-Comms
- * frame whenever Anima's Borderlands mode is active.
+ * Moves Minecraft chat to the bottom-right and wraps all visible lines in a clean,
+ * stylized Borderlands frame aligned directly above the attached typing bar.
  */
 @Mixin(ChatComponent.class)
 public abstract class ChatComponentMixin {
@@ -28,6 +30,21 @@ public abstract class ChatComponentMixin {
     @Shadow private int chatScrollbarPos;
 
     @Unique private boolean anima$chatShifted = false;
+
+    @Inject(method = "getWidth()I", at = @At("RETURN"), cancellable = true, require = 0)
+    private void anima$clampBorderlandsChatWidth(CallbackInfoReturnable<Integer> cir) {
+        if (!AnimaMod.config().isBorderlands() || this.minecraft == null || this.minecraft.getWindow() == null) {
+            return;
+        }
+        int guiW = this.minecraft.getWindow().getGuiScaledWidth();
+        int guiH = this.minecraft.getWindow().getGuiScaledHeight();
+        BorderlandsChatLayout.Box box = BorderlandsChatLayout.compute(this.minecraft, guiW, guiH);
+        double scale = Math.max(0.1, this.minecraft.options.chatScale().get());
+        int maxLogicalW = Math.max(80, (int) Math.floor(box.scaledWidth() / scale));
+        if (cir.getReturnValue() > maxLogicalW) {
+            cir.setReturnValue(maxLogicalW);
+        }
+    }
 
     @Inject(
             method = "extractRenderState(Lnet/minecraft/client/gui/GuiGraphicsExtractor;Lnet/minecraft/client/gui/Font;IIILnet/minecraft/client/gui/components/ChatComponent$DisplayMode;Z)V",
@@ -41,19 +58,17 @@ public abstract class ChatComponentMixin {
             int mouseX,
             int mouseY,
             ChatComponent.DisplayMode displayMode,
-            boolean isFocused,
+            boolean changeCursorOnInsert,
             CallbackInfo ci) {
         this.anima$chatShifted = false;
         if (!AnimaMod.config().isBorderlands()) {
             return;
         }
 
-        double scale = this.minecraft.options.chatScale().get();
-        int rawWidth = ChatComponent.getWidth(this.minecraft.options.chatWidth().get());
-        int scaledWidth = Math.max(80, (int) Math.ceil(rawWidth * scale));
-        int shiftX = Math.max(0, g.guiWidth() - scaledWidth - 14);
+        boolean isFocused = displayMode != null && displayMode.foreground;
+        BorderlandsChatLayout.Box box = BorderlandsChatLayout.compute(this.minecraft, g.guiWidth(), g.guiHeight());
 
-        // Count currently visible lines to size the stylized Borderlands ECHO-Comms frame cleanly
+        double scale = this.minecraft.options.chatScale().get();
         int lineHeight = (int) Math.round(9.0 * (this.minecraft.options.chatLineSpacing().get() + 1.0));
         int maxHeight = ChatComponent.getHeight(isFocused
                 ? this.minecraft.options.chatHeightFocused().get()
@@ -71,35 +86,14 @@ public abstract class ChatComponentMixin {
         }
 
         if (visible > 0 || isFocused) {
-            int boxLines = Math.max(visible, isFocused ? 2 : 0);
-            int boxH = (int) Math.ceil(boxLines * lineHeight * scale) + 10;
-            int boxBottom = g.guiHeight() - 36;
-            int boxTop = Math.max(16, boxBottom - boxH);
-            int boxLeft = shiftX - 4;
-            int boxRight = Math.min(g.guiWidth() - 6, shiftX + scaledWidth + 6);
-
-            // Stylized Borderlands ECHO-Comms chat panel (comic ink + slate + steel-cyan border + gold accent)
-            g.fill(boxLeft - 1, boxTop - 1, boxRight + 1, boxBottom + 1, 0xEC06080D);
-            g.fillGradient(boxLeft, boxTop, boxRight, boxBottom, 0xCC111824, 0xCC0A0F18);
-            g.outline(boxLeft, boxTop, boxRight - boxLeft, boxBottom - boxTop, 0xFF334E68);
-            // Right golden-amber vertical accent bar + top cyan sheen
-            g.fill(boxRight - 2, boxTop + 2, boxRight, boxBottom - 2, 0xFFFBBF24);
-            g.fill(boxLeft + 2, boxTop, boxRight - 4, boxTop + 1, 0x5538BDF8);
-            // Compact "ECHO COMMS" header tag on top-right
-            String tag = "ECHO // COMMS";
-            int tw = font.width(tag);
-            int tagLeft = boxRight - tw - 10;
-            int tagTop = boxTop - 10;
-            if (tagTop >= 4) {
-                g.fill(tagLeft - 1, tagTop - 1, boxRight + 1, boxTop + 1, 0xEC06080D);
-                g.fill(tagLeft, tagTop, boxRight, boxTop, 0xE2101824);
-                g.fill(boxRight - 2, tagTop, boxRight, boxTop, 0xFFFBBF24);
-                g.text(font, tag, tagLeft + 4, tagTop + 1, 0xFF94C5EB, false);
-            }
+            int drawLines = Math.max(visible, isFocused ? 1 : 0);
+            int contentH = (int) Math.ceil(drawLines * lineHeight * scale) + 8;
+            int boxTop = Math.max(14, box.chatBottom() - contentH);
+            BorderlandsChatLayout.drawChatFrame(g, box, boxTop, isFocused);
         }
 
         g.pose().pushMatrix();
-        g.pose().translate((float) shiftX, 0.0f);
+        g.pose().translate((float) box.shiftX(), 0.0f);
         this.anima$chatShifted = true;
     }
 
@@ -115,7 +109,7 @@ public abstract class ChatComponentMixin {
             int mouseX,
             int mouseY,
             ChatComponent.DisplayMode displayMode,
-            boolean isFocused,
+            boolean changeCursorOnInsert,
             CallbackInfo ci) {
         if (this.anima$chatShifted) {
             g.pose().popMatrix();

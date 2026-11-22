@@ -16,7 +16,8 @@
 		"GameRendererMixin",
 		"PauseScreenMixin",
 		"HudMixin",
-		"ChatComponentMixin"
+		"ChatComponentMixin",
+		"ChatScreenMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1
