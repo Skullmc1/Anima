@@ -20,11 +20,6 @@ import net.minecraft.world.item.ItemStack;
  */
 public final class BorderlandsHudRenderer {
 
-    @FunctionalInterface
-    public interface SlotExtractor {
-        void extract(GuiGraphicsExtractor g, int x, int y, DeltaTracker deltaTracker, Player player, ItemStack stack, int seed);
-    }
-
     // Borderlands palette (high-contrast comic ink + metallic slate + signature amber/cyan/crimson)
     private static final int COL_INK          = 0xF206080D;
     private static final int COL_PANEL_BG     = 0xD80E141E;
@@ -145,7 +140,8 @@ public final class BorderlandsHudRenderer {
     /**
      * Renders the stylized Borderlands bottom-center Hotbar (and offhand slot if occupied).
      */
-    public static void renderHotbar(GuiGraphicsExtractor g, DeltaTracker deltaTracker, Player player, SlotExtractor slotExtractor) {
+    public static void renderHotbar(GuiGraphicsExtractor g, Minecraft mc, Player player) {
+        Font font = mc.font;
         int centerX = g.guiWidth() / 2;
         int hotbarW = 182;
         int hotbarH = 22;
@@ -185,16 +181,21 @@ public final class BorderlandsHudRenderer {
             g.fill(ox + 1, top, ox + 21, top + 1, 0x4438BDF8);
         }
 
-        // Render all 9 hotbar items + offhand item natively via Hud.extractSlot
+        // Render all 9 hotbar items + offhand item via public GuiGraphicsExtractor API
         int seed = 1;
         for (int slot = 0; slot < 9; slot++) {
-            int ix = left + 3 + slot * 20;
-            int iy = top + 3;
-            slotExtractor.extract(g, ix, iy, deltaTracker, player, player.getInventory().getItem(slot), seed++);
+            ItemStack stack = player.getInventory().getItem(slot);
+            if (!stack.isEmpty()) {
+                int ix = left + 3 + slot * 20;
+                int iy = top + 3;
+                g.item(player, stack, ix, iy, seed++);
+                g.itemDecorations(font, stack, ix, iy);
+            }
         }
         if (!offhand.isEmpty()) {
             int ox = (offhandArm == HumanoidArm.LEFT) ? (left - 26) : (left + hotbarW + 10);
-            slotExtractor.extract(g, ox, top + 3, deltaTracker, player, offhand, seed);
+            g.item(player, offhand, ox, top + 3, seed);
+            g.itemDecorations(font, offhand, ox, top + 3);
         }
     }
 
