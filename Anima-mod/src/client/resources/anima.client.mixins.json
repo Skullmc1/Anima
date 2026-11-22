@@ -9,6 +9,9 @@
 		"SkyRendererMixin",
 		"BiomeColorsMixin",
 		"DynamicLightMixin",
+		"EntityLightMixin",
+		"ItemInHandLightMixin",
+		"FluidRendererMixin",
 		"PauseScreenMixin"
 	],
 	"injectors": {

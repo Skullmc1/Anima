@@ -94,7 +94,7 @@ public final class VoxelRenderer {
                 float dLen = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
                 dx /= dLen; dy /= dLen; dz /= dLen;
 
-                tracePrimaryRay(camX, camY, camZ, dx, dy, dz, atm, config, lightmap, fogColor, skyZenith, rgb);
+                tracePrimaryRay(camX, camY, camZ, dx, dy, dz, atm, config, timeSeconds, lmUniforms, lightmap, fogColor, skyZenith, rgb);
                 pixels[py * width + px] = ColorMath.packRgb(rgb[0], rgb[1], rgb[2]);
             }
         });
@@ -108,6 +108,8 @@ public final class VoxelRenderer {
             float dx, float dy, float dz,
             AnimaAtmosphere atm,
             AnimaConfig config,
+            float timeSeconds,
+            AnimaMc26Pipeline.LightmapUniforms lmUniforms,
             float[][] lightmap,
             float[] fogColor,
             float[] skyZenith,
@@ -135,6 +137,7 @@ public final class VoxelRenderer {
 
         boolean hitWater = false;
         float waterHitT = 0f;
+        float waterHitX = 0f, waterHitZ = 0f;
         float waterU = 0f, waterV = 0f;
         int waterSkyLight = 15;
         int waterBlockLight = 0;
@@ -151,6 +154,8 @@ public final class VoxelRenderer {
                     float wx = ox + dx * t;
                     float wy = oy + dy * t;
                     float wz = oz + dz * t;
+                    waterHitX = wx;
+                    waterHitZ = wz;
                     waterU = ColorMath.clamp01(wx - vx);
                     waterV = ColorMath.clamp01(wz - vz);
                     int aboveY = Math.min(VoxelWorld.SIZE_Y - 1, vy + 1);
@@ -193,7 +198,7 @@ public final class VoxelRenderer {
                         shadeSolidHit(vx, vy, vz, nx, ny, nz, hx, hy, hz, u, v, texel, config, lightmap, surfaceRgb);
 
                         if (hitWater) {
-                            // Real Minecraft 26.2 water: alpha-blended water_still.png * BiomeColors * lightmap over lit riverbed
+                            // Exact mirror of Anima-mod's terrain.vsh + terrain.fsh water pipeline
                             float[] waterTex = new float[3];
                             atlas.sampleWater(waterU, waterV, atm, config, waterTex);
                             float[] wLight = lightmap[waterSkyLight * 16 + waterBlockLight];
@@ -201,10 +206,35 @@ public final class VoxelRenderer {
                             float wg = waterTex[1] * wLight[1];
                             float wb = waterTex[2] * wLight[2];
 
-                            // Minecraft 26.2 translucent water alpha (~0.68) + slight depth attenuation
                             float waterDepth = Math.max(0.1f, t - waterHitT);
                             float depthFog = ColorMath.clamp01(waterDepth / (config.isActive() ? 14f : 9f));
                             float waterAlpha = ColorMath.clamp01(0.62f + depthFog * 0.25f);
+
+                            if (config.isActive() && config.waterEnhancement) {
+                                float wt = timeSeconds * 1.4f;
+                                float w1 = (float) Math.sin(waterHitX * 1.10 + waterHitZ * 0.72 + wt * 2.1) * 0.030f;
+                                float w2 = (float) Math.cos(waterHitX * 0.68 - waterHitZ * 1.38 + wt * 1.65) * 0.022f;
+                                float wave = w1 + w2;
+                                float r1 = (float) (Math.sin(waterHitX * 3.4 + waterHitZ * 2.2 + wt * 2.8) * Math.cos(waterHitX * 2.1 - waterHitZ * 3.6 + wt * 2.1));
+                                float r2 = (float) Math.sin(waterHitX * 6.2 - waterHitZ * 5.4 - wt * 3.5);
+                                float ripple = r1 * 0.65f + r2 * 0.35f;
+
+                                float cosTheta = ColorMath.clamp(Math.abs(dy) + ripple * 0.06f, 0.04f, 1.0f);
+                                float m = 1.0f - cosTheta;
+                                float fresnel = 0.06f + 0.68f * (m * m * m * m);
+
+                                float skyR = fogColor[0] * 1.08f;
+                                float skyG = fogColor[1] * 1.08f;
+                                float skyB = fogColor[2] * 1.08f;
+                                float crest = ColorMath.smoothstep(0.015f, 0.055f, wave + ripple * 0.025f) * 0.22f;
+                                float shimmer = ColorMath.smoothstep(0.55f, 0.96f, ripple) * 0.16f;
+
+                                wr = ColorMath.clamp01(ColorMath.lerp(wr * 0.88f, skyR, fresnel * 0.68f) + (skyR * 0.65f + 0.35f) * (crest + shimmer));
+                                wg = ColorMath.clamp01(ColorMath.lerp(wg * 1.04f, skyG, fresnel * 0.68f) + (skyG * 0.65f + 0.35f) * (crest + shimmer));
+                                wb = ColorMath.clamp01(ColorMath.lerp(wb * 1.08f, skyB, fresnel * 0.68f) + (skyB * 0.65f + 0.35f) * (crest + shimmer));
+                                waterAlpha = ColorMath.clamp(ColorMath.lerp(waterAlpha * 0.84f, 0.94f, fresnel), 0.45f, 0.96f);
+                            }
+
                             outRgb[0] = ColorMath.lerp(surfaceRgb[0], wr, waterAlpha);
                             outRgb[1] = ColorMath.lerp(surfaceRgb[1], wg, waterAlpha);
                             outRgb[2] = ColorMath.lerp(surfaceRgb[2], wb, waterAlpha);
@@ -267,20 +297,28 @@ public final class VoxelRenderer {
         int ly = vy + ny;
         int lz = vz + nz;
         int skyL = world.getSkyLight(lx, ly, lz);
-        int blkL = world.getBlockLight(lx, ly, lz);
+        float blkFloat = world.getBlockLight(lx, ly, lz);
         if (config.isActive() && config.dynamicHandheldLight && AnimaDynamicLightEngine.isActive()) {
-            blkL = Math.max(blkL, AnimaDynamicLightEngine.computeDynamicBlockLight(hx + nx * 0.25, hy + ny * 0.25, hz + nz * 0.25));
+            blkFloat = Math.max(blkFloat, AnimaDynamicLightEngine.computeDynamicBlockLightFloat(hx + nx * 0.25, hy + ny * 0.25, hz + nz * 0.25));
         }
 
-        // Exact Minecraft 26.2 lightmap.fsh lookup + cardinal face shade + 4-corner smooth AO
-        float[] lightRgb = lightmap[skyL * 16 + blkL];
+        // Exact Minecraft 26.2 linearly-filtered 16x16 lightmap lookup (smooth sub-level interpolation!)
+        int bLo = Math.min(15, (int) Math.floor(blkFloat));
+        int bHi = Math.min(15, bLo + 1);
+        float bFrac = blkFloat - bLo;
+        float[] l0 = lightmap[skyL * 16 + bLo];
+        float[] l1 = lightmap[skyL * 16 + bHi];
+        float lr = ColorMath.lerp(l0[0], l1[0], bFrac);
+        float lg = ColorMath.lerp(l0[1], l1[1], bFrac);
+        float lb = ColorMath.lerp(l0[2], l1[2], bFrac);
+
         float cardinal = AnimaMc26Pipeline.cardinalShade(nx, ny, nz);
         float ao = computeSmoothAO(lx, ly, lz, nx, ny, nz, u, v);
         float shade = cardinal * ao;
 
-        outRgb[0] = ColorMath.clamp01(albedo[0] * lightRgb[0] * shade);
-        outRgb[1] = ColorMath.clamp01(albedo[1] * lightRgb[1] * shade);
-        outRgb[2] = ColorMath.clamp01(albedo[2] * lightRgb[2] * shade);
+        outRgb[0] = ColorMath.clamp01(albedo[0] * lr * shade);
+        outRgb[1] = ColorMath.clamp01(albedo[1] * lg * shade);
+        outRgb[2] = ColorMath.clamp01(albedo[2] * lb * shade);
     }
 
     private void shadeCrossPlant(

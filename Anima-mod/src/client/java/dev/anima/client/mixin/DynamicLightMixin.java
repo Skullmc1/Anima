@@ -13,9 +13,9 @@ import org.spongepowered.asm.mixin.injection.Inject;
 import org.spongepowered.asm.mixin.injection.callback.CallbackInfoReturnable;
 
 /**
- * Injects Anima's shader-free dynamic handheld light (main hand & offhand)
- * directly into Minecraft 26.2's LightCoordsUtil.getLightCoords — the unified light
- * lookup used by chunk mesh compilation (BlockModelLighter), fluids, and entities.
+ * Injects Anima's smooth sub-level (0..240) dynamic light directly into
+ * Minecraft 26.2's LightCoordsUtil.getLightCoords so block light fades
+ * continuously instead of stepping in coarse integer levels.
  */
 @Mixin(LightCoordsUtil.class)
 public class DynamicLightMixin {
@@ -41,15 +41,15 @@ public class DynamicLightMixin {
         }
 
         int packed = cir.getReturnValue();
-        int currentBlock = LightCoordsUtil.block(packed);
-        if (currentBlock < 15) {
-            int dynamic = AnimaDynamicLightEngine.computeDynamicBlockLight(
+        int currentSmoothBlock = LightCoordsUtil.smoothBlock(packed);
+        if (currentSmoothBlock < 240) {
+            int dynamicSmooth = AnimaDynamicLightEngine.computeSmoothDynamicBlockLight(
                     pos.getX() + 0.5,
                     pos.getY() + 0.5,
                     pos.getZ() + 0.5
             );
-            if (dynamic > currentBlock) {
-                cir.setReturnValue(LightCoordsUtil.withBlock(packed, dynamic));
+            if (dynamicSmooth > currentSmoothBlock) {
+                cir.setReturnValue(LightCoordsUtil.smoothPack(dynamicSmooth, LightCoordsUtil.smoothSky(packed)));
             }
         }
     }
