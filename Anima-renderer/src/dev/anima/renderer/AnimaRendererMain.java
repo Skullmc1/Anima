@@ -104,39 +104,14 @@ public final class AnimaRendererMain {
         ImageIO.write(sheet, "png", sheetPath.toFile());
         System.out.println("[Anima-renderer] Saved comparison sheet -> " + sheetPath.toAbsolutePath());
 
-        // Dedicated Sun & Wavy Water comparison (camera aimed directly toward the Golden Hour sun over the pond!)
-        AnimaAtmosphere sunAtm = new AnimaAtmosphere(10900f, 0f);
-        float sCamX = 48.0f, sCamY = 21.5f, sCamZ = 22.0f;
-        float sLookX = sCamX + sunAtm.sunDirX * 30f;
-        float sLookY = sCamY + sunAtm.sunDirY * 22f - 2.0f;
-        float sLookZ = sCamZ + sunAtm.sunDirZ * 30f;
-        BufferedImage sunVan = renderer.render(width, height, sCamX, sCamY, sCamZ, sLookX, sLookY, sLookZ, 68f, sunAtm, vanillaCfg, 2.5f);
-        BufferedImage sunAni = renderer.render(width, height, sCamX, sCamY, sCamZ, sLookX, sLookY, sLookZ, 68f, sunAtm, animaCfg, 2.5f);
-
-        BufferedImage sunSheet = new BufferedImage(width * 2 + pad * 3, height + pad * 2 + headerH, BufferedImage.TYPE_INT_RGB);
-        Graphics2D sg = sunSheet.createGraphics();
-        sg.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
-        sg.setColor(new Color(18, 20, 26));
-        sg.fillRect(0, 0, sunSheet.getWidth(), sunSheet.getHeight());
-        sg.setFont(new Font("SansSerif", Font.BOLD, 20));
-        sg.setColor(new Color(235, 240, 248));
-        sg.drawString("ANIMA v0.10.0 (Lush) — Pixel-Art Sun & Crystal Wavy Water (Vanilla vs Anima Lush)", pad + 6, 30);
-        sg.drawImage(sunVan, pad, headerH + pad, null);
-        sg.drawImage(sunAni, pad * 2 + width, headerH + pad, null);
-        drawBadge(sg, pad + 14, headerH + pad + 14, "VANILLA — Square Sun & Flat Water", new Color(25, 28, 35, 195), Color.WHITE);
-        drawBadge(sg, pad * 2 + width + 14, headerH + pad + 14, "ANIMA v0.10.0 (Lush) — Crystal Water & Pixel-Art Sun", new Color(18, 48, 62, 210), new Color(165, 240, 255));
-        sg.dispose();
-        Path sunPath = outDir.resolve("sun_showcase.png");
-        ImageIO.write(sunSheet, "png", sunPath.toFile());
-        System.out.println("[Anima-renderer] Saved sun showcase -> " + sunPath.toAbsolutePath());
-
-        // Dedicated 3-Mode Showcase: Vanilla vs Lush vs Borderlands (Cel-Shaded Comic)
+        // 3-Way Borderlands Showcase: Vanilla vs Anima Borderlands vs Miasma R1.0.2
         AnimaAtmosphere modeAtm = new AnimaAtmosphere(5200f, 0f);
         AnimaConfig borderlandsCfg = AnimaConfig.borderlands();
         int mw = 720, mh = 405;
         BufferedImage mVan = renderer.render(mw, mh, camX, camY, camZ, lookX, lookY, lookZ, fov, modeAtm, vanillaCfg, 2.5f);
-        BufferedImage mLush = renderer.render(mw, mh, camX, camY, camZ, lookX, lookY, lookZ, fov, modeAtm, animaCfg, 2.5f);
         BufferedImage mBord = renderer.render(mw, mh, camX, camY, camZ, lookX, lookY, lookZ, fov, modeAtm, borderlandsCfg, 2.5f);
+        BufferedImage mMiasma = renderer.renderMiasma(mw, mh, camX, camY, camZ, lookX, lookY, lookZ, fov, modeAtm, 2.5f);
+
         BufferedImage modeSheet = new BufferedImage(mw * 3 + pad * 4, mh + pad * 2 + headerH, BufferedImage.TYPE_INT_RGB);
         Graphics2D mg = modeSheet.createGraphics();
         mg.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
@@ -144,17 +119,17 @@ public final class AnimaRendererMain {
         mg.fillRect(0, 0, modeSheet.getWidth(), modeSheet.getHeight());
         mg.setFont(new Font("SansSerif", Font.BOLD, 20));
         mg.setColor(new Color(235, 240, 248));
-        mg.drawString("ANIMA v0.10.0 — Visual Modes: Off (Vanilla)  vs  Lush (Bloom + Filmic)  vs  Borderlands (Depth Outlines)", pad + 6, 30);
+        mg.drawString("BORDERLANDS SHOWCASE: Vanilla 26.2  vs  Anima v0.12.0 Borderlands  vs  Miasma R1.0.2", pad + 6, 30);
         mg.drawImage(mVan, pad, headerH + pad, null);
-        mg.drawImage(mLush, pad * 2 + mw, headerH + pad, null);
-        mg.drawImage(mBord, pad * 3 + mw * 2, headerH + pad, null);
-        drawBadge(mg, pad + 12, headerH + pad + 12, "OFF (Vanilla)", new Color(25, 28, 35, 195), Color.WHITE);
-        drawBadge(mg, pad * 2 + mw + 12, headerH + pad + 12, "LUSH (Cinematic)", new Color(18, 48, 62, 210), new Color(165, 240, 255));
-        drawBadge(mg, pad * 3 + mw * 2 + 12, headerH + pad + 12, "BORDERLANDS (Cel-Shaded)", new Color(68, 40, 12, 220), new Color(255, 210, 90));
+        mg.drawImage(mBord, pad * 2 + mw, headerH + pad, null);
+        mg.drawImage(mMiasma, pad * 3 + mw * 2, headerH + pad, null);
+        drawBadge(mg, pad + 12, headerH + pad + 12, "VANILLA 26.2", new Color(25, 28, 35, 195), Color.WHITE);
+        drawBadge(mg, pad * 2 + mw + 12, headerH + pad + 12, "ANIMA v0.12.0 — Borderlands (Cel-Shaded)", new Color(68, 40, 12, 220), new Color(255, 210, 90));
+        drawBadge(mg, pad * 3 + mw * 2 + 12, headerH + pad + 12, "MIASMA R1.0.2 (Toxic Cel-Shaded)", new Color(20, 52, 28, 220), new Color(155, 245, 165));
         mg.dispose();
         Path modePath = outDir.resolve("borderlands_showcase.png");
         ImageIO.write(modeSheet, "png", modePath.toFile());
-        System.out.println("[Anima-renderer] Saved Borderlands mode showcase -> " + modePath.toAbsolutePath());
+        System.out.println("[Anima-renderer] Saved Borderlands showcase -> " + modePath.toAbsolutePath());
 
         // Optional 3-way Shader Pack Benchmark: Vanilla vs Anima v0.6.0 vs Iris/OptiFine Shader Pack (.zip)
         Path shaderZip = null;
@@ -188,7 +163,7 @@ public final class AnimaRendererMain {
             cg.fillRect(0, 0, cmp.getWidth(), cmp.getHeight());
             cg.setFont(new Font("SansSerif", Font.BOLD, 20));
             cg.setColor(new Color(235, 240, 248));
-            cg.drawString("3-WAY BENCHMARK: Vanilla 26.2  vs  Anima v0.10.0 Lush (Bloom + Filmic)  vs  " + pack.name + " (" + pack.glslFileCount + " GLSL files)", pad + 6, 30);
+            cg.drawString("3-WAY BENCHMARK: Vanilla 26.2  vs  Anima v0.12.0 Lush (Bloom + Filmic)  vs  " + pack.name + " (" + pack.glslFileCount + " GLSL files)", pad + 6, 30);
 
             for (int i = 0; i < scenarios.length; i++) {
                 Scenario s = scenarios[i];
@@ -219,7 +194,7 @@ public final class AnimaRendererMain {
                 cg.drawImage(imgS, pad * 3 + cw * 2, rowY, null);
 
                 drawBadge(cg, pad + 10, rowY + 10, "VANILLA — " + s.id.toUpperCase() + " (" + tvMs + "ms)", new Color(25, 28, 35, 195), Color.WHITE);
-                drawBadge(cg, pad * 2 + cw + 10, rowY + 10, "ANIMA v0.10.0 LUSH — " + s.id.toUpperCase() + " (" + taMs + "ms)", new Color(18, 48, 62, 210), new Color(165, 240, 255));
+                drawBadge(cg, pad * 2 + cw + 10, rowY + 10, "ANIMA v0.12.0 LUSH — " + s.id.toUpperCase() + " (" + taMs + "ms)", new Color(18, 48, 62, 210), new Color(165, 240, 255));
                 drawBadge(cg, pad * 3 + cw * 2 + 10, rowY + 10, pack.name + " (" + tsMs + "ms)", new Color(58, 28, 18, 210), new Color(255, 215, 155));
 
                 System.out.printf("[Anima-renderer] 3-Way %-7s | Vanilla: %3d ms | Anima: %3d ms | %s: %3d ms%n", s.id, tvMs, taMs, pack.name, tsMs);

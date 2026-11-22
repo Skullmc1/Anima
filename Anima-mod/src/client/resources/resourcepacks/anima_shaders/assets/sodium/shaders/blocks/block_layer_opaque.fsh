@@ -111,22 +111,23 @@ void main() {
         vec3 R = reflect(viewDir, N);
 
         float ndotv = clamp(dot(-viewDir, N), 0.02, 1.0);
-        float fresnel = 0.08 + 0.82 * pow(1.0 - ndotv, 3.2);
+        float fresnel = 0.04 + 0.72 * pow(1.0 - ndotv, 4.0);
 
-        vec3 horizonCol = u_FogColor.rgb * 1.14;
-        vec3 zenithCol = u_FogColor.rgb * vec3(0.42, 0.66, 1.14);
-        vec3 skyRefl = mix(horizonCol, zenithCol, clamp(R.y * 1.35, 0.0, 1.0));
+        vec3 horizonCol = u_FogColor.rgb * 1.02;
+        vec3 zenithCol = u_FogColor.rgb * vec3(0.32, 0.62, 1.12);
+        vec3 skyRefl = mix(horizonCol, zenithCol, clamp(R.y * 1.4, 0.0, 1.0));
 
         vec3 sunDir = normalize(vec3(0.45, 0.52, 0.72));
-        float specSharp = pow(max(0.0, dot(R, sunDir)), 36.0) * 1.10;
-        float specBroad = pow(max(0.0, dot(R, normalize(vec3(-0.35, 0.65, 0.67)))), 16.0) * 0.30;
-        float skyBright = clamp(dot(u_FogColor.rgb, vec3(0.333)) * 1.8, 0.08, 1.0);
+        float specSharp = pow(max(0.0, dot(R, sunDir)), 48.0) * 1.15;
+        float specBroad = pow(max(0.0, dot(R, normalize(vec3(-0.35, 0.65, 0.67)))), 20.0) * 0.24;
+        float skyBright = clamp(dot(u_FogColor.rgb, vec3(0.333)) * 1.8, 0.10, 1.0);
         vec3 specCol = (horizonCol * 0.65 + vec3(0.35)) * (specSharp + specBroad) * skyBright;
 
-        vec3 waterBody = pow(max(color.rgb, vec3(0.0)), vec3(1.16)) * vec3(0.48, 1.02, 1.16);
+        // Deep crystal Complementary turquoise-sapphire water body (no chalky pale blue!)
+        vec3 waterBody = pow(max(color.rgb, vec3(0.0)), vec3(1.32)) * vec3(0.24, 0.84, 1.02);
 
-        color.rgb = mix(waterBody, skyRefl, fresnel * 0.84) + specCol;
-        color.a = clamp(mix(0.46, 0.92, fresnel), 0.42, 0.94);
+        color.rgb = mix(waterBody, skyRefl, fresnel * 0.74) + specCol;
+        color.a = clamp(mix(0.44, 0.88, fresnel), 0.40, 0.90);
     }
 
     fragColor = _linearFog(color, v_FragDistance, u_FogColor, u_EnvironmentFog, u_RenderFog, fadeFactor);

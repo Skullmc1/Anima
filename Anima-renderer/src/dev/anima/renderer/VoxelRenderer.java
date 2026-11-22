@@ -106,9 +106,9 @@ public final class VoxelRenderer {
 
         img.setRGB(0, 0, width, height, pixels, 0, width);
 
-        // Apply exact v1.0.0 fullscreen PostChain effects: anima:borderlands or anima:lush!
+        // Apply exact v0.11.0 fullscreen PostChain effects: anima:borderlands or anima:lush!
         if (config.isBorderlands()) {
-            applyBorderlandsDepthPostPass(img, depthBuf);
+            applyBorderlandsDepthPostPass(img, depthBuf, false);
         } else if (config.isActive()) {
             applyLushBloomPostPass(img);
         }
@@ -116,9 +116,66 @@ public final class VoxelRenderer {
     }
 
     /**
-     * Exact mirror of anima:post/borderlands (Miasma 12-tap Laplacian depth silhouette outlines + cloud outlines + clean 1.14x cel-shading).
+     * Renders the scene with Miasma R1.0.2's signature cel-shading + Laplacian depth outlines + greenish miasma tint.
      */
-    private static void applyBorderlandsDepthPostPass(BufferedImage img, float[] depthBuf) {
+    public BufferedImage renderMiasma(
+            int width, int height,
+            float camX, float camY, float camZ,
+            float lookX, float lookY, float lookZ,
+            float fovDeg, AnimaAtmosphere atm, float timeSeconds) {
+        BufferedImage img = render(width, height, camX, camY, camZ, lookX, lookY, lookZ, fovDeg, atm, AnimaConfig.vanilla(), timeSeconds);
+        // Re-extract depth via fast pass or apply Miasma pass directly on Borderlands depth
+        AnimaConfig bCfg = AnimaConfig.borderlands();
+        AnimaMc26Pipeline.LightmapUniforms lmUniforms = new AnimaMc26Pipeline.LightmapUniforms();
+        AnimaMc26Pipeline.fillVanillaLightmapUniforms(atm, lmUniforms);
+        float[][] lightmap = new float[256][3];
+        for (int sky = 0; sky < 16; sky++)
+            for (int blk = 0; blk < 16; blk++)
+                AnimaMc26Pipeline.evaluateMc26Lightmap(sky, blk, lmUniforms, lightmap[sky * 16 + blk]);
+        float[] fogColor = {0.48f * atm.dayFactor + 0.05f, 0.66f * atm.dayFactor + 0.09f, 0.44f * atm.dayFactor + 0.05f};
+        float[] skyZenith = {0.26f * atm.dayFactor + 0.02f, 0.46f * atm.dayFactor + 0.05f, 0.30f * atm.dayFactor + 0.03f};
+
+        float fx = lookX - camX, fy = lookY - camY, fz = lookZ - camZ;
+        float fLen = (float) Math.sqrt(fx * fx + fy * fy + fz * fz);
+        fx /= fLen; fy /= fLen; fz /= fLen;
+        float rx = -fz, rz = fx;
+        float rLen = (float) Math.sqrt(rx * rx + rz * rz);
+        rx /= rLen; rz /= rLen;
+        float ux = -rz * fy, uy = rz * fx - rx * fz, uz = rx * fy;
+        float aspect = (float) width / (float) height;
+        float halfTan = (float) Math.tan(Math.toRadians(fovDeg * 0.5));
+        final float fFx = fx, fFy = fy, fFz = fz, fRx = rx, fRz = rz, fUx = ux, fUy = uy, fUz = uz;
+
+        int[] pixels = new int[width * height];
+        float[] depthBuf = new float[width * height];
+        IntStream.range(0, height).parallel().forEach(py -> {
+            float[] rgb = new float[3];
+            float[] hitDepth = new float[1];
+            float ndcY = 1f - 2f * ((py + 0.5f) / height);
+            for (int px = 0; px < width; px++) {
+                float ndcX = 2f * ((px + 0.5f) / width) - 1f;
+                float dx = fFx + ndcX * aspect * halfTan * fRx + ndcY * halfTan * fUx;
+                float dy = fFy + ndcY * halfTan * fUy;
+                float dz = fFz + ndcX * aspect * halfTan * fRz + ndcY * halfTan * fUz;
+                float dLen = (float) Math.sqrt(dx * dx + dy * dy + dz * dz);
+                dx /= dLen; dy /= dLen; dz /= dLen;
+                hitDepth[0] = 256.0f;
+                tracePrimaryRay(camX, camY, camZ, dx, dy, dz, atm, bCfg, timeSeconds, lmUniforms, lightmap, fogColor, skyZenith, rgb, hitDepth);
+                int idx = py * width + px;
+                pixels[idx] = ColorMath.packRgb(rgb[0], rgb[1], rgb[2]);
+                depthBuf[idx] = hitDepth[0];
+            }
+        });
+        img.setRGB(0, 0, width, height, pixels, 0, width);
+        applyBorderlandsDepthPostPass(img, depthBuf, true);
+        return img;
+    }
+
+    /**
+     * Exact mirror of anima:post/borderlands (Miasma 12-tap Laplacian depth silhouette outlines + cloud outlines).
+     * When miasmaTint=true, applies Miasma R1.0.2's greenish toxic atmosphere for direct comparison.
+     */
+    private static void applyBorderlandsDepthPostPass(BufferedImage img, float[] depthBuf, boolean miasmaTint) {
         int w = img.getWidth();
         int h = img.getHeight();
         int[] src = img.getRGB(0, 0, w, h, null, 0, w);
@@ -188,6 +245,13 @@ public final class VoxelRenderer {
                 }
 
                 float ink = ColorMath.clamp(Math.max(depthInk, cloudInk), 0f, 0.90f);
+                if (miasmaTint) {
+                    // Miasma R1.0.2 signature desaturated greenish-toxic poison atmosphere
+                    float ml = 0.2126f * cr + 0.7152f * cg + 0.0722f * cb;
+                    cr = ColorMath.clamp01(ColorMath.lerp(ml, cr, 0.78f) * 0.86f + 0.02f);
+                    cg = ColorMath.clamp01(ColorMath.lerp(ml, cg, 0.88f) * 1.08f + 0.05f);
+                    cb = ColorMath.clamp01(ColorMath.lerp(ml, cb, 0.72f) * 0.80f + 0.01f);
+                }
                 cr = ColorMath.lerp(cr, 0.04f, ink);
                 cg = ColorMath.lerp(cg, 0.035f, ink);
                 cb = ColorMath.lerp(cb, 0.055f, ink);
@@ -374,26 +438,27 @@ public final class VoxelRenderer {
                             if (config.isActive() && config.waterEnhancement) {
                                 final float H = 0.3926990817f;
                                 float wt = timeSeconds * 2.4f;
-                                float w1 = (float) Math.sin(waterHitX * (3.0f * H) + waterHitZ * (2.0f * H) + wt) * 0.042f;
-                                float w2 = (float) Math.cos(waterHitX * (2.0f * H) - waterHitZ * (4.0f * H) + wt * 0.75f) * 0.026f;
-                                float wave = w1 + w2;
                                 float r1 = (float) (Math.sin(waterHitX * (6.0f * H) + waterHitZ * (4.0f * H) + wt * 1.1f) * Math.cos(waterHitX * (4.0f * H) - waterHitZ * (7.0f * H) + wt * 0.85f));
                                 float r2 = (float) Math.sin(waterHitX * (12.0f * H) - waterHitZ * (10.0f * H) - wt * 1.35f);
                                 float ripple = r1 * 0.65f + r2 * 0.35f;
 
-                                float cosTheta = ColorMath.clamp(Math.abs(dy) + ripple * 0.07f, 0.04f, 1.0f);
-                                float fresnel = 0.08f + 0.78f * (float) Math.pow(1.0f - cosTheta, 3.0);
+                                float ndotv = ColorMath.clamp(Math.abs(dy) + ripple * 0.07f, 0.02f, 1.0f);
+                                float fresnel = 0.04f + 0.72f * (float) Math.pow(1.0f - ndotv, 4.0);
 
-                                float skyR = fogColor[0] * 1.06f;
-                                float skyG = fogColor[1] * 1.06f;
-                                float skyB = fogColor[2] * 1.06f;
-                                float spec = (float) Math.pow(Math.max(0f, ripple * 0.5f + 0.5f), 7.0) * 0.32f;
-                                float crest = ColorMath.smoothstep(0.025f, 0.068f, wave) * 0.14f;
+                                float skyR = fogColor[0] * 1.02f;
+                                float skyG = fogColor[1] * 1.02f;
+                                float skyB = fogColor[2] * 1.02f;
+                                float spec = (float) Math.pow(Math.max(0f, ripple * 0.5f + 0.5f), 8.0) * 0.28f;
 
-                                wr = ColorMath.clamp01(ColorMath.lerp(wr * 0.45f, skyR, fresnel * 0.78f) + (skyR * 0.75f + 0.25f) * (spec + crest));
-                                wg = ColorMath.clamp01(ColorMath.lerp(wg * 0.96f, skyG, fresnel * 0.78f) + (skyG * 0.75f + 0.25f) * (spec + crest));
-                                wb = ColorMath.clamp01(ColorMath.lerp(wb * 1.12f, skyB, fresnel * 0.78f) + (skyB * 0.75f + 0.25f) * (spec + crest));
-                                waterAlpha = ColorMath.clamp(ColorMath.lerp(0.50f, 0.90f, fresnel), 0.45f, 0.92f);
+                                // Deep crystal Complementary turquoise-sapphire water body
+                                float wbR = (float) Math.pow(Math.max(0f, wr), 1.32f) * 0.24f;
+                                float wbG = (float) Math.pow(Math.max(0f, wg), 1.32f) * 0.84f;
+                                float wbB = (float) Math.pow(Math.max(0f, wb), 1.32f) * 1.02f;
+
+                                wr = ColorMath.clamp01(ColorMath.lerp(wbR, skyR, fresnel * 0.74f) + (skyR * 0.65f + 0.35f) * spec);
+                                wg = ColorMath.clamp01(ColorMath.lerp(wbG, skyG, fresnel * 0.74f) + (skyG * 0.65f + 0.35f) * spec);
+                                wb = ColorMath.clamp01(ColorMath.lerp(wbB, skyB, fresnel * 0.74f) + (skyB * 0.65f + 0.35f) * spec);
+                                waterAlpha = ColorMath.clamp(ColorMath.lerp(0.44f, 0.88f, fresnel), 0.40f, 0.90f);
                             }
 
                             outRgb[0] = ColorMath.lerp(surfaceRgb[0], wr, waterAlpha);
@@ -641,11 +706,11 @@ public final class VoxelRenderer {
         }
         if (!hitBottom && !hitSide) return;
 
-        float base = ColorMath.lerp(0.14f, 0.96f, atm.dayFactor);
-        float faceMul = hitSide ? 0.90f : 0.72f;
-        float cr = base * faceMul * ColorMath.lerp(1.0f, 1.05f, atm.goldenHourFactor);
-        float cg = base * faceMul * ColorMath.lerp(1.0f, 0.84f, atm.goldenHourFactor);
-        float cb = base * faceMul * ColorMath.lerp(1.0f, 0.72f, atm.goldenHourFactor);
+        float base = ColorMath.lerp(0.26f, 0.96f, atm.dayFactor);
+        float faceMul = hitSide ? 0.92f : 0.70f;
+        float cr = base * faceMul * ColorMath.lerp(0.68f, ColorMath.lerp(1.00f, 1.06f, atm.goldenHourFactor), atm.dayFactor);
+        float cg = base * faceMul * ColorMath.lerp(0.80f, ColorMath.lerp(1.00f, 0.85f, atm.goldenHourFactor), atm.dayFactor);
+        float cb = base * faceMul * ColorMath.lerp(1.18f, ColorMath.lerp(1.00f, 0.72f, atm.goldenHourFactor), atm.dayFactor);
 
         float horizonFade = ColorMath.smoothstep(0.025f, 0.16f, dy) * (1f - ColorMath.smoothstep(145f, 235f, hitT));
         float alpha = 0.82f * horizonFade;

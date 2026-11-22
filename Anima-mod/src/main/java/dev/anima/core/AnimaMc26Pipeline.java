@@ -60,36 +60,36 @@ public final class AnimaMc26Pipeline {
 
         float warmth = ColorMath.clamp01(cfg.warmthStrength);
 
-        // 1. Complementary-inspired warm golden-white midday sunlight, rich sunset amber, luminous midnight-blue moonlight
-        float skyR = ColorMath.lerp(0.56f, ColorMath.lerp(1.22f, 1.28f, atm.goldenHourFactor), atm.dayFactor);
-        float skyG = ColorMath.lerp(0.74f, ColorMath.lerp(1.10f, 0.72f, atm.goldenHourFactor), atm.dayFactor);
-        float skyB = ColorMath.lerp(1.18f, ColorMath.lerp(0.88f, 0.36f, atm.goldenHourFactor), atm.dayFactor);
+        // 1. Complementary-matched warm golden-white midday sunlight, rich sunset amber, luminous moonlit blue
+        float skyR = ColorMath.lerp(0.62f, ColorMath.lerp(1.24f, 1.32f, atm.goldenHourFactor), atm.dayFactor);
+        float skyG = ColorMath.lerp(0.80f, ColorMath.lerp(1.12f, 0.78f, atm.goldenHourFactor), atm.dayFactor);
+        float skyB = ColorMath.lerp(1.26f, ColorMath.lerp(0.88f, 0.42f, atm.goldenHourFactor), atm.dayFactor);
 
-        u.skyLightColor[0] = ColorMath.lerp(u.skyLightColor[0], skyR, 0.88f * warmth);
-        u.skyLightColor[1] = ColorMath.lerp(u.skyLightColor[1], skyG, 0.88f * warmth);
-        u.skyLightColor[2] = ColorMath.lerp(u.skyLightColor[2], skyB, 0.88f * warmth);
+        u.skyLightColor[0] = ColorMath.lerp(u.skyLightColor[0], skyR, 0.90f * warmth);
+        u.skyLightColor[1] = ColorMath.lerp(u.skyLightColor[1], skyG, 0.90f * warmth);
+        u.skyLightColor[2] = ColorMath.lerp(u.skyLightColor[2], skyB, 0.90f * warmth);
 
-        // Lift night skyFactor slightly for Complementary's luminous moonlit night readability
-        u.skyFactor = Math.max(u.skyFactor, 0.28f * atm.nightFactor);
+        // Luminous moonlit night readability matching Complementary Reimagined
+        u.skyFactor = Math.max(u.skyFactor, 0.42f * atm.nightFactor);
 
-        // 2. Cool atmospheric shadow fill (luminous blue-indigo at night, crisp sky-blue in daytime shade)
-        u.ambientColor[0] = ColorMath.lerp(0.08f, ColorMath.lerp(0.06f, 0.14f, atm.goldenHourFactor), atm.dayFactor);
-        u.ambientColor[1] = ColorMath.lerp(0.13f, ColorMath.lerp(0.11f, 0.09f, atm.goldenHourFactor), atm.dayFactor);
-        u.ambientColor[2] = ColorMath.lerp(0.27f, ColorMath.lerp(0.23f, 0.23f, atm.goldenHourFactor), atm.dayFactor);
+        // 2. Cool atmospheric shadow fill (luminous sapphire-blue at night, clean sky-blue in shade)
+        u.ambientColor[0] = ColorMath.lerp(0.11f, ColorMath.lerp(0.08f, 0.15f, atm.goldenHourFactor), atm.dayFactor);
+        u.ambientColor[1] = ColorMath.lerp(0.17f, ColorMath.lerp(0.13f, 0.10f, atm.goldenHourFactor), atm.dayFactor);
+        u.ambientColor[2] = ColorMath.lerp(0.34f, ColorMath.lerp(0.25f, 0.24f, atm.goldenHourFactor), atm.dayFactor);
 
         // 3. Shape vanilla gamma lift for deeper shadow contrast
-        float contrastFactor = ColorMath.lerp(0.80f, 0.50f, cfg.shadowDepth);
+        float contrastFactor = ColorMath.lerp(0.80f, 0.54f, cfg.shadowDepth);
         u.brightnessFactor = u.brightnessFactor * contrastFactor;
 
-        // 4. Warm 2600K incandescent torch/lantern block light with subtle organic flicker
+        // 4. Warm 2600K incandescent torch/lantern block light with cozy glow
         float flicker = 1.0f;
         if (cfg.torchFlicker > 0.001f) {
             flicker += (float) (Math.sin(elapsedSeconds * 7.3) * 0.025 + Math.sin(elapsedSeconds * 13.7) * 0.015) * cfg.torchFlicker;
         }
         u.blockLightTint[0] = 1.00f * flicker;
-        u.blockLightTint[1] = 0.52f * flicker;
-        u.blockLightTint[2] = 0.14f * flicker;
-        u.blockFactor = ColorMath.clamp(u.blockFactor * (1.32f + 0.36f * atm.nightFactor), 0f, 1.90f);
+        u.blockLightTint[1] = 0.56f * flicker;
+        u.blockLightTint[2] = 0.18f * flicker;
+        u.blockFactor = ColorMath.clamp(u.blockFactor * (1.38f + 0.42f * atm.nightFactor), 0f, 1.95f);
     }
 
     /**
@@ -181,10 +181,11 @@ public final class AnimaMc26Pipeline {
 
         if (cfg.isActive() && cfg.atmosphericFog) {
             float startMult = AnimaFogEngine.fogStartMultiplier(atm, cfg);
-            fogStart = Math.min(fogStart, renderDistance * (startMult * 0.85f));
-            fogEnd = Math.min(fogEnd, renderDistance * (1.05f - 0.15f * atm.goldenHourFactor));
+            fogStart = renderDistance * startMult;
+            // Push fogEnd out so distant mountains stay crisp & tinted instead of whiteout (like Complementary!)
+            fogEnd = renderDistance * ColorMath.lerp(1.38f, 1.18f, atm.goldenHourFactor);
         }
-        return ColorMath.clamp01((dist - fogStart) / Math.max(1.0f, fogEnd - fogStart));
+        return ColorMath.clamp01((dist - fogStart) / Math.max(1.0f, fogEnd - fogStart)) * ColorMath.lerp(0.68f, 0.80f, atm.goldenHourFactor);
     }
 
     /**

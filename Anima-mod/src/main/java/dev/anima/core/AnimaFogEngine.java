@@ -65,8 +65,8 @@ public final class AnimaFogEngine {
      */
     public static float fogStartMultiplier(AnimaAtmosphere atm, AnimaConfig config) {
         if (!config.isActive() || !config.atmosphericFog) return 0.75f;
-        float middayStart = 0.62f - 0.10f * config.fogDensity;
-        float goldenStart = 0.28f;
-        return ColorMath.clamp(ColorMath.lerp(middayStart, goldenStart, atm.goldenHourFactor), 0.22f, 0.75f);
+        float middayStart = 0.70f;
+        float goldenStart = 0.44f;
+        return ColorMath.clamp(ColorMath.lerp(middayStart, goldenStart, atm.goldenHourFactor), 0.36f, 0.78f);
     }
 }

@@ -16,9 +16,15 @@ public final class AnimaWaterEngine {
         float[] rgb = new float[3];
         ColorMath.unpackRgb(vanillaRgb, rgb);
 
-        float[] targetTint = {0.14f, 0.62f, 0.74f};
-        ColorMath.lerpRgb(rgb, targetTint, 0.45f * config.waterClarity, rgb);
-        ColorMath.adjustSaturation(rgb, 1.14f);
+        // Shift vanilla cobalt blue strongly toward Complementary's deep ocean emerald-turquoise
+        float[] targetTint = {0.08f, 0.54f, 0.66f};
+        ColorMath.lerpRgb(rgb, targetTint, 0.74f * config.waterClarity, rgb);
+        // Keep night water deep dark navy-teal instead of bright cobalt blue
+        float nightDeepen = ColorMath.lerp(0.55f, 1.0f, atm.dayFactor);
+        rgb[0] *= nightDeepen;
+        rgb[1] *= nightDeepen;
+        rgb[2] *= nightDeepen;
+        ColorMath.adjustSaturation(rgb, 1.10f);
         return ColorMath.packRgb(rgb[0], rgb[1], rgb[2]);
     }
 

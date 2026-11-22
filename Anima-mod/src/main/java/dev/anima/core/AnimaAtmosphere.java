@@ -83,27 +83,27 @@ public final class AnimaAtmosphere {
         ColorMath.lerpRgb(noonShadow, goldenShadow, goldenHourFactor, dayShadow);
         ColorMath.lerpRgb(nightShadow, dayShadow, dayFactor, shadowTintColor);
 
-        // 4. Sky zenith & horizon colors (Complementary Reimagined-inspired palettes)
-        float[] noonZenith = {0.14f, 0.42f, 0.88f};
-        float[] goldenZenith = {0.18f, 0.24f, 0.54f};
-        float[] nightZenith = {0.04f, 0.09f, 0.24f};
+        // 4. Sky zenith & horizon colors (Complementary Reimagined-matched palettes)
+        float[] noonZenith = {0.16f, 0.46f, 0.90f};
+        float[] goldenZenith = {0.20f, 0.27f, 0.56f};
+        float[] nightZenith = {0.07f, 0.14f, 0.34f};
 
         float[] dayZenith = new float[3];
         ColorMath.lerpRgb(noonZenith, goldenZenith, goldenHourFactor, dayZenith);
         ColorMath.lerpRgb(nightZenith, dayZenith, dayFactor, zenithColor);
 
-        float[] noonHorizon = {0.66f, 0.85f, 0.99f};
-        float[] goldenHorizon = {1.00f, 0.58f, 0.30f};
-        float[] nightHorizon = {0.12f, 0.20f, 0.39f};
+        float[] noonHorizon = {0.64f, 0.82f, 0.96f};
+        float[] goldenHorizon = {0.98f, 0.62f, 0.34f};
+        float[] nightHorizon = {0.16f, 0.28f, 0.52f};
 
         float[] dayHorizon = new float[3];
         ColorMath.lerpRgb(noonHorizon, goldenHorizon, goldenHourFactor, dayHorizon);
         ColorMath.lerpRgb(nightHorizon, dayHorizon, dayFactor, horizonColor);
 
-        // 5. Atmospheric perspective fog color
-        float[] noonFog = {0.66f, 0.84f, 0.98f};
-        float[] goldenFog = {0.95f, 0.60f, 0.38f};
-        float[] nightFog = {0.10f, 0.17f, 0.34f};
+        // 5. Atmospheric perspective fog color (clean sky-blue midday, golden sunset, luminous midnight-blue)
+        float[] noonFog = {0.62f, 0.80f, 0.94f};
+        float[] goldenFog = {0.92f, 0.64f, 0.42f};
+        float[] nightFog = {0.13f, 0.23f, 0.44f};
 
         float[] dayFog = new float[3];
         ColorMath.lerpRgb(noonFog, goldenFog, goldenHourFactor, dayFog);

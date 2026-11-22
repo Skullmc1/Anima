@@ -18,7 +18,7 @@ out vec4 fragColor;
 
 vec3 extractBright(vec3 c) {
     float l = dot(c, vec3(0.2126, 0.7152, 0.0722));
-    float mask = smoothstep(0.68, 1.0, l);
+    float mask = smoothstep(0.56, 0.96, l);
     return c * mask;
 }
 

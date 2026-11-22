@@ -29,13 +29,13 @@ void main() {
     float depth = texture(InDepthSampler, texCoord).r;
 
     // 1. Add soft Complementary-style warm screen-space Bloom (sun, torches, water glints, sky!)
-    col += bloom * vec3(0.42, 0.39, 0.34);
+    col += bloom * vec3(0.46, 0.42, 0.35);
 
     // 2. Complementary warm-key / cool-shadow color grading
     float lum = dot(col, vec3(0.2126, 0.7152, 0.0722));
-    vec3 shadowTint = vec3(0.92, 0.96, 1.08);
-    vec3 highlightTint = vec3(1.06, 1.01, 0.94);
-    col *= mix(shadowTint, highlightTint, smoothstep(0.15, 0.78, lum));
+    vec3 shadowTint = vec3(0.90, 0.96, 1.09);
+    vec3 highlightTint = vec3(1.08, 1.02, 0.92);
+    col *= mix(shadowTint, highlightTint, smoothstep(0.14, 0.76, lum));
 
     // 3. Filmic S-curve tonemap + crisp vibrancy across the ENTIRE frame
     vec3 mapped = acesTonemap(col * 1.18);
