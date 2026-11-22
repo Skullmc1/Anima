@@ -2,6 +2,7 @@ package dev.anima.renderer;
 
 import dev.anima.core.AnimaAtmosphere;
 import dev.anima.core.AnimaConfig;
+import dev.anima.core.AnimaDynamicLightEngine;
 
 import javax.imageio.ImageIO;
 import java.awt.*;
@@ -28,6 +29,7 @@ public final class AnimaRendererMain {
         long t0 = System.currentTimeMillis();
         VoxelWorld world = new VoxelWorld();
         TextureAtlas atlas = new TextureAtlas();
+        System.out.println("[Anima-renderer] Loaded REAL Minecraft 26.2 textures from: " + atlas.textureSource);
         VoxelRenderer renderer = new VoxelRenderer(world, atlas);
         System.out.printf("[Anima-renderer] World & lighting built in %d ms%n", System.currentTimeMillis() - t0);
 
@@ -36,11 +38,11 @@ public final class AnimaRendererMain {
         float lookX = 48.5f, lookY = 19.6f, lookZ = 44.0f;
         float fov = 68f;
 
-        record Scenario(String id, String label, float dayTicks, float rain) {}
+        record Scenario(String id, String label, float dayTicks, float rain, boolean holdingTorch) {}
         Scenario[] scenarios = {
-                new Scenario("day", "Midday (5200 ticks)", 5200f, 0f),
-                new Scenario("golden", "Golden Hour (11350 ticks)", 11350f, 0f),
-                new Scenario("night", "Moonlit Night (18000 ticks)", 18000f, 0f)
+                new Scenario("day", "Midday (5200 ticks)", 5200f, 0f, false),
+                new Scenario("golden", "Golden Hour (11350 ticks)", 11350f, 0f, false),
+                new Scenario("night", "Moonlit Night + Offhand Torch (18000 ticks)", 18000f, 0f, true)
         };
 
         AnimaConfig vanillaCfg = AnimaConfig.vanilla();
@@ -52,15 +54,23 @@ public final class AnimaRendererMain {
             Scenario s = scenarios[i];
             AnimaAtmosphere atm = new AnimaAtmosphere(s.dayTicks, s.rain);
 
+            AnimaDynamicLightEngine.clear();
             long s0 = System.currentTimeMillis();
             shots[i][0] = renderer.render(width, height, camX, camY, camZ, lookX, lookY, lookZ, fov, atm, vanillaCfg, 2.5f);
             long tVan = System.currentTimeMillis() - s0;
             ImageIO.write(shots[i][0], "png", outDir.resolve(s.id + "_vanilla.png").toFile());
 
+            if (s.holdingTorch) {
+                // Simulate player holding a Torch (luminance 14) in their offhand slightly forward/left of camera
+                AnimaDynamicLightEngine.updateSource(camX + 1.8, camY - 1.1, camZ + 2.8, 14);
+            } else {
+                AnimaDynamicLightEngine.clear();
+            }
             long s1 = System.currentTimeMillis();
             shots[i][1] = renderer.render(width, height, camX, camY, camZ, lookX, lookY, lookZ, fov, atm, animaCfg, 2.5f);
             long tAni = System.currentTimeMillis() - s1;
             ImageIO.write(shots[i][1], "png", outDir.resolve(s.id + "_anima.png").toFile());
+            AnimaDynamicLightEngine.clear();
 
             System.out.printf("[Anima-renderer] Rendered %-12s | Vanilla: %4d ms | Anima (Lush): %4d ms%n", s.id, tVan, tAni);
         }

@@ -5,13 +5,29 @@ import dev.anima.core.AnimaConfig;
 import dev.anima.core.AnimaShadingEngine;
 import dev.anima.core.ColorMath;
 
+import javax.imageio.ImageIO;
+import java.awt.image.BufferedImage;
+import java.io.IOException;
+import java.io.InputStream;
+import java.nio.file.Files;
+import java.nio.file.Path;
+import java.util.Optional;
+import java.util.stream.Stream;
+import java.util.zip.ZipEntry;
+import java.util.zip.ZipFile;
+
 /**
- * Procedural 16x16 Minecraft-style pixel-art textures for every block face.
- * Nearest-neighbor sampled so blocks retain authentic crisp Minecraft pixel art.
+ * Loads REAL 16x16 Minecraft block textures directly from the Minecraft 26.2 client JAR
+ * (including authentic Plains biome tinting for grayscale grass/foliage textures and
+ * grass_block_side_overlay compositing).
  */
 public final class TextureAtlas {
 
     public static final int SIZE = 16;
+
+    // Authentic Minecraft Plains biome tint colors
+    private static final int PLAINS_GRASS_TINT = 0x91BD59;
+    private static final int PLAINS_FOLIAGE_TINT = 0x77AB2F;
 
     private final int[] grassTop = new int[SIZE * SIZE];
     private final int[] grassSide = new int[SIZE * SIZE];
@@ -29,243 +45,134 @@ public final class TextureAtlas {
     private final int[] dandelion = new int[SIZE * SIZE];
     private final int[] torchTex = new int[SIZE * SIZE];
 
-    public TextureAtlas() {
-        generateDirt();
-        generateGrassTop();
-        generateGrassSide();
-        generateStone();
-        generateCobble();
-        generateSand();
-        generateGravel();
-        generateOakLog();
-        generateOakLeaves();
-        generateOakPlanks();
-        generateTallGrass();
-        generateFlower(poppy, 0xFFE02828, 0xFFFF5A3C);
-        generateFlower(dandelion, 0xFFF2D422, 0xFFFFEA55);
-        generateTorch();
-    }
+    public final boolean loadedRealTextures;
+    public final String textureSource;
 
-    private static float hash(int x, int y, int seed) {
-        int h = x * 374761393 + y * 668265263 + seed * 1442695041;
-        h = (h ^ (h >> 13)) * 1274126177;
-        return ((h ^ (h >> 16)) & 0xFFFF) / 65535f;
-    }
-
-    private static int pack(int a, int r, int g, int b) {
-        r = Math.max(0, Math.min(255, r));
-        g = Math.max(0, Math.min(255, g));
-        b = Math.max(0, Math.min(255, b));
-        return (a << 24) | (r << 16) | (g << 8) | b;
-    }
-
-    private void generateDirt() {
-        for (int y = 0; y < SIZE; y++) {
-            for (int x = 0; x < SIZE; x++) {
-                float n = hash(x, y, 11);
-                int r = 132 + (int) ((n - 0.5f) * 34);
-                int g = 94 + (int) ((n - 0.5f) * 26);
-                int b = 64 + (int) ((n - 0.5f) * 20);
-                if (hash(x, y, 17) > 0.88f) {
-                    // tiny pebble speckle
-                    r += 22; g += 20; b += 18;
-                }
-                dirt[y * SIZE + x] = pack(255, r, g, b);
-            }
+    public TextureAtlas() throws IOException {
+        Path mcJar = locateMinecraftClientJar();
+        if (mcJar == null || !Files.exists(mcJar)) {
+            throw new IOException("Could not locate Minecraft 26.2 client JAR in Anima-mod/.gradle/loom-cache. "
+                    + "Build Anima-mod first or pass -Dmc.jar=<path-to-minecraft-jar>.");
         }
-    }
 
-    private void generateGrassTop() {
-        for (int y = 0; y < SIZE; y++) {
-            for (int x = 0; x < SIZE; x++) {
-                float n = hash(x, y, 23);
-                float clump = hash(x / 2, y / 2, 29);
-                float v = n * 0.65f + clump * 0.35f;
-                int r = 108 + (int) ((v - 0.5f) * 30);
-                int g = 172 + (int) ((v - 0.5f) * 36);
-                int b = 76 + (int) ((v - 0.5f) * 20);
-                grassTop[y * SIZE + x] = pack(255, r, g, b);
-            }
+        try (ZipFile zip = new ZipFile(mcJar.toFile())) {
+            loadTinted(zip, "assets/minecraft/textures/block/grass_block_top.png", PLAINS_GRASS_TINT, grassTop);
+            loadGrassSide(zip, grassSide);
+            loadDirect(zip, "assets/minecraft/textures/block/dirt.png", dirt);
+            loadDirect(zip, "assets/minecraft/textures/block/stone.png", stone);
+            loadDirect(zip, "assets/minecraft/textures/block/cobblestone.png", cobble);
+            loadDirect(zip, "assets/minecraft/textures/block/sand.png", sand);
+            loadDirect(zip, "assets/minecraft/textures/block/gravel.png", gravel);
+            loadDirect(zip, "assets/minecraft/textures/block/oak_log.png", oakLogSide);
+            loadDirect(zip, "assets/minecraft/textures/block/oak_log_top.png", oakLogTop);
+            loadTinted(zip, "assets/minecraft/textures/block/oak_leaves.png", PLAINS_FOLIAGE_TINT, oakLeaves);
+            loadDirect(zip, "assets/minecraft/textures/block/oak_planks.png", oakPlanks);
+            loadTinted(zip, "assets/minecraft/textures/block/short_grass.png", PLAINS_GRASS_TINT, tallGrass);
+            loadDirect(zip, "assets/minecraft/textures/block/poppy.png", poppy);
+            loadDirect(zip, "assets/minecraft/textures/block/dandelion.png", dandelion);
+            loadDirect(zip, "assets/minecraft/textures/block/torch.png", torchTex);
         }
+
+        this.loadedRealTextures = true;
+        this.textureSource = mcJar.toAbsolutePath().toString();
     }
 
-    private void generateGrassSide() {
-        int[] edgeDepth = {3, 4, 3, 2, 4, 5, 3, 3, 4, 2, 3, 5, 4, 3, 4, 3};
-        for (int y = 0; y < SIZE; y++) {
-            for (int x = 0; x < SIZE; x++) {
-                if (y < edgeDepth[x]) {
-                    grassSide[y * SIZE + x] = grassTop[y * SIZE + x];
-                } else if (y == edgeDepth[x]) {
-                    // subtle shadow under grass overhang
-                    int d = dirt[y * SIZE + x];
-                    int r = (int) (((d >> 16) & 0xFF) * 0.80f);
-                    int g = (int) (((d >> 8) & 0xFF) * 0.80f);
-                    int b = (int) ((d & 0xFF) * 0.80f);
-                    grassSide[y * SIZE + x] = pack(255, r, g, b);
-                } else {
-                    grassSide[y * SIZE + x] = dirt[y * SIZE + x];
+    private static Path locateMinecraftClientJar() throws IOException {
+        String prop = System.getProperty("mc.jar");
+        if (prop != null && !prop.isBlank()) {
+            Path p = Path.of(prop);
+            if (Files.exists(p)) return p;
+        }
+
+        // Auto-discover from Anima-mod's Fabric Loom cache
+        Path[] searchRoots = {
+                Path.of("..", "Anima-mod", ".gradle", "loom-cache"),
+                Path.of("Anima-mod", ".gradle", "loom-cache")
+        };
+
+        for (Path root : searchRoots) {
+            if (!Files.isDirectory(root)) continue;
+            try (Stream<Path> walk = Files.walk(root)) {
+                Optional<Path> found = walk
+                        .filter(Files::isRegularFile)
+                        .filter(p -> {
+                            String name = p.getFileName().toString();
+                            return name.startsWith("minecraft-clientOnly-") && name.endsWith(".jar") && !name.contains("sources");
+                        })
+                        .findFirst();
+                if (found.isPresent()) {
+                    return found.get();
                 }
             }
         }
+        return null;
     }
 
-    private void generateStone() {
+    private static BufferedImage readPng(ZipFile zip, String entryPath) throws IOException {
+        ZipEntry entry = zip.getEntry(entryPath);
+        if (entry == null) {
+            throw new IOException("Missing Minecraft texture in JAR: " + entryPath);
+        }
+        try (InputStream in = zip.getInputStream(entry)) {
+            BufferedImage img = ImageIO.read(in);
+            if (img == null) {
+                throw new IOException("Failed to decode PNG: " + entryPath);
+            }
+            return img;
+        }
+    }
+
+    private static void loadDirect(ZipFile zip, String entryPath, int[] dst) throws IOException {
+        BufferedImage img = readPng(zip, entryPath);
         for (int y = 0; y < SIZE; y++) {
             for (int x = 0; x < SIZE; x++) {
-                float n = hash(x, y, 31) * 0.55f + hash(x / 2, y, 37) * 0.45f;
-                int base = 122 + (int) ((n - 0.5f) * 34);
-                stone[y * SIZE + x] = pack(255, base, base + 2, base + 5);
+                dst[y * SIZE + x] = img.getRGB(x % img.getWidth(), y % img.getHeight());
             }
         }
     }
 
-    private void generateCobble() {
+    private static void loadTinted(ZipFile zip, String entryPath, int tintRgb, int[] dst) throws IOException {
+        BufferedImage img = readPng(zip, entryPath);
+        int tr = (tintRgb >> 16) & 0xFF;
+        int tg = (tintRgb >> 8) & 0xFF;
+        int tb = tintRgb & 0xFF;
+
         for (int y = 0; y < SIZE; y++) {
             for (int x = 0; x < SIZE; x++) {
-                boolean mortar = (y % 4 == 0) || ((x + (y / 4) * 3) % 5 == 0);
-                float n = hash(x, y, 41);
-                int base = mortar ? 82 + (int) (n * 16) : 124 + (int) ((n - 0.5f) * 38);
-                cobble[y * SIZE + x] = pack(255, base, base + 1, base + 3);
-            }
-        }
-    }
-
-    private void generateSand() {
-        for (int y = 0; y < SIZE; y++) {
-            for (int x = 0; x < SIZE; x++) {
-                float n = hash(x, y, 47);
-                int r = 218 + (int) ((n - 0.5f) * 24);
-                int g = 204 + (int) ((n - 0.5f) * 22);
-                int b = 154 + (int) ((n - 0.5f) * 24);
-                sand[y * SIZE + x] = pack(255, r, g, b);
-            }
-        }
-    }
-
-    private void generateGravel() {
-        for (int y = 0; y < SIZE; y++) {
-            for (int x = 0; x < SIZE; x++) {
-                float n = hash(x, y, 53);
-                int base = 112 + (int) ((n - 0.5f) * 52);
-                gravel[y * SIZE + x] = pack(255, base + 4, base + 2, base);
-            }
-        }
-    }
-
-    private void generateOakLog() {
-        for (int y = 0; y < SIZE; y++) {
-            for (int x = 0; x < SIZE; x++) {
-                // Vertical bark grooves
-                float streak = hash(x, y / 3, 61);
-                float detail = hash(x, y, 67);
-                float v = streak * 0.7f + detail * 0.3f;
-                int r = 104 + (int) ((v - 0.5f) * 38);
-                int g = 82 + (int) ((v - 0.5f) * 30);
-                int b = 52 + (int) ((v - 0.5f) * 22);
-                oakLogSide[y * SIZE + x] = pack(255, r, g, b);
-
-                // Concentric wood rings on top
-                float dx = x - 7.5f;
-                float dy = y - 7.5f;
-                float dist = (float) Math.sqrt(dx * dx + dy * dy);
-                if (dist > 6.6f) {
-                    oakLogTop[y * SIZE + x] = oakLogSide[y * SIZE + x];
-                } else {
-                    boolean ring = ((int) dist) % 2 == 0;
-                    int tr = (ring ? 168 : 146) + (int) ((detail - 0.5f) * 18);
-                    int tg = (ring ? 136 : 114) + (int) ((detail - 0.5f) * 16);
-                    int tb = (ring ? 88 : 72) + (int) ((detail - 0.5f) * 12);
-                    oakLogTop[y * SIZE + x] = pack(255, tr, tg, tb);
+                int argb = img.getRGB(x % img.getWidth(), y % img.getHeight());
+                int a = (argb >>> 24) & 0xFF;
+                if (a == 0) {
+                    dst[y * SIZE + x] = 0;
+                    continue;
                 }
+                int r = (((argb >> 16) & 0xFF) * tr) / 255;
+                int g = (((argb >> 8) & 0xFF) * tg) / 255;
+                int b = ((argb & 0xFF) * tb) / 255;
+                dst[y * SIZE + x] = (a << 24) | (r << 16) | (g << 8) | b;
             }
         }
     }
 
-    private void generateOakLeaves() {
+    private static void loadGrassSide(ZipFile zip, int[] dst) throws IOException {
+        BufferedImage base = readPng(zip, "assets/minecraft/textures/block/grass_block_side.png");
+        BufferedImage overlay = readPng(zip, "assets/minecraft/textures/block/grass_block_side_overlay.png");
+
+        int tr = (PLAINS_GRASS_TINT >> 16) & 0xFF;
+        int tg = (PLAINS_GRASS_TINT >> 8) & 0xFF;
+        int tb = PLAINS_GRASS_TINT & 0xFF;
+
         for (int y = 0; y < SIZE; y++) {
             for (int x = 0; x < SIZE; x++) {
-                float hole = hash(x, y, 71);
-                // Fancy leaves have airy cutouts (~18% transparent pixels)
-                if (hole < 0.17f && (x > 0 && x < 15 && y > 0 && y < 15)) {
-                    oakLeaves[y * SIZE + x] = 0x00000000;
+                int bArgb = base.getRGB(x, y);
+                int oArgb = overlay.getRGB(x, y);
+                int oa = (oArgb >>> 24) & 0xFF;
+                if (oa > 128) {
+                    int r = (((oArgb >> 16) & 0xFF) * tr) / 255;
+                    int g = (((oArgb >> 8) & 0xFF) * tg) / 255;
+                    int b = ((oArgb & 0xFF) * tb) / 255;
+                    dst[y * SIZE + x] = (0xFF << 24) | (r << 16) | (g << 8) | b;
                 } else {
-                    float n = hash(x, y, 73) * 0.65f + hash(x / 2, y / 2, 79) * 0.35f;
-                    int r = 74 + (int) ((n - 0.5f) * 32);
-                    int g = 142 + (int) ((n - 0.5f) * 44);
-                    int b = 52 + (int) ((n - 0.5f) * 24);
-                    oakLeaves[y * SIZE + x] = pack(255, r, g, b);
-                }
-            }
-        }
-    }
-
-    private void generateOakPlanks() {
-        for (int y = 0; y < SIZE; y++) {
-            for (int x = 0; x < SIZE; x++) {
-                boolean seam = (y % 4 == 0) || ((y / 4 == 1 || y / 4 == 3) && x == 8) || ((y / 4 == 0 || y / 4 == 2) && x == 0);
-                float n = hash(x / 2, y, 83);
-                int r = (seam ? 118 : 164) + (int) ((n - 0.5f) * 22);
-                int g = (seam ? 92 : 132) + (int) ((n - 0.5f) * 18);
-                int b = (seam ? 56 : 82) + (int) ((n - 0.5f) * 14);
-                oakPlanks[y * SIZE + x] = pack(255, r, g, b);
-            }
-        }
-    }
-
-    private void generateTallGrass() {
-        for (int y = 0; y < SIZE; y++) {
-            for (int x = 0; x < SIZE; x++) {
-                int blades = 0;
-                // 5 organic grass blades rising from bottom (y=15) upward
-                if (x == 3 && y >= 6) blades = 1;
-                if (x == 4 && y >= 9) blades = 1;
-                if (x == 6 && y >= 4) blades = 1;
-                if (x == 7 && y >= 7) blades = 1;
-                if (x == 9 && y >= 5) blades = 1;
-                if (x == 10 && y >= 8) blades = 1;
-                if (x == 12 && y >= 6) blades = 1;
-                if (x == 2 && y >= 11) blades = 1;
-                if (x == 13 && y >= 10) blades = 1;
-                if (blades == 1) {
-                    float tip = 1.0f - (y / 15f);
-                    int r = 78 + (int) (tip * 36);
-                    int g = 144 + (int) (tip * 44);
-                    int b = 52 + (int) (tip * 18);
-                    tallGrass[y * SIZE + x] = pack(255, r, g, b);
-                } else {
-                    tallGrass[y * SIZE + x] = 0x00000000;
-                }
-            }
-        }
-    }
-
-    private void generateFlower(int[] target, int petalMain, int petalHighlight) {
-        for (int y = 0; y < SIZE; y++) {
-            for (int x = 0; x < SIZE; x++) {
-                if ((x == 7 || x == 8) && y >= 9 && y <= 15) {
-                    target[y * SIZE + x] = pack(255, 68, 134, 48);
-                } else if ((x == 6 && y == 12) || (x == 9 && y == 11)) {
-                    target[y * SIZE + x] = pack(255, 82, 152, 54);
-                } else if (x >= 6 && x <= 9 && y >= 5 && y <= 8) {
-                    boolean center = (x == 7 || x == 8) && (y == 6 || y == 7);
-                    target[y * SIZE + x] = center ? petalHighlight : petalMain;
-                } else {
-                    target[y * SIZE + x] = 0x00000000;
-                }
-            }
-        }
-    }
-
-    private void generateTorch() {
-        for (int y = 0; y < SIZE; y++) {
-            for (int x = 0; x < SIZE; x++) {
-                if ((x == 7 || x == 8) && y >= 7 && y <= 15) {
-                    torchTex[y * SIZE + x] = pack(255, 132, 92, 52);
-                } else if ((x == 7 || x == 8) && y >= 4 && y <= 6) {
-                    // Glowing ember & flame
-                    torchTex[y * SIZE + x] = (y == 4) ? pack(255, 255, 245, 170) : pack(255, 255, 176, 52);
-                } else {
-                    torchTex[y * SIZE + x] = 0x00000000;
+                    dst[y * SIZE + x] = bArgb;
                 }
             }
         }
@@ -300,8 +207,7 @@ public final class TextureAtlas {
         int a = (argb >>> 24) & 0xFF;
         if (a == 0) return 0;
 
-        // Apply Anima's shader-free foliage enhancement to grass & leaves
-        boolean isGrassGreen = (type == BlockType.GRASS && (faceNormalY > 0 || ty < 4))
+        boolean isGrassGreen = (type == BlockType.GRASS && (faceNormalY > 0 || ty < 5))
                 || type == BlockType.OAK_LEAVES
                 || type == BlockType.TALL_GRASS;
         if (isGrassGreen && config.isActive() && config.foliageEnhancement) {

@@ -2,6 +2,7 @@ package dev.anima.renderer;
 
 import dev.anima.core.AnimaAtmosphere;
 import dev.anima.core.AnimaConfig;
+import dev.anima.core.AnimaDynamicLightEngine;
 import dev.anima.core.AnimaFogEngine;
 import dev.anima.core.AnimaLightmapEngine;
 import dev.anima.core.AnimaShadingEngine;
@@ -135,6 +136,9 @@ public final class VoxelRenderer {
                     int aboveY = Math.min(VoxelWorld.SIZE_Y - 1, vy + 1);
                     waterSkyLight = world.getSkyLight(vx, aboveY, vz);
                     waterBlockLight = Math.max(world.getBlockLight(vx, vy, vz), world.getBlockLight(vx, aboveY, vz));
+                    if (config.isActive() && config.dynamicHandheldLight && AnimaDynamicLightEngine.isActive()) {
+                        waterBlockLight = Math.max(waterBlockLight, AnimaDynamicLightEngine.computeDynamicBlockLight(waterHitX, waterHitY + 0.5, waterHitZ));
+                    }
                 } else if (block.crossModel) {
                     float[] plantRgb = new float[3];
                     float plantT = intersectCrossModel(ox, oy, oz, dx, dy, dz, vx, vy, vz, block, atm, config, plantRgb);
@@ -253,6 +257,9 @@ public final class VoxelRenderer {
         int lz = vz + nz;
         int skyL = world.getSkyLight(lx, ly, lz);
         int blkL = world.getBlockLight(lx, ly, lz);
+        if (config.isActive() && config.dynamicHandheldLight && AnimaDynamicLightEngine.isActive()) {
+            blkL = Math.max(blkL, AnimaDynamicLightEngine.computeDynamicBlockLight(hx + nx * 0.25, hy + ny * 0.25, hz + nz * 0.25));
+        }
 
         float[] lightRgb = new float[3];
         AnimaLightmapEngine.computeLight(skyL, blkL, atm, config, timeSeconds, lightRgb);
@@ -303,6 +310,9 @@ public final class VoxelRenderer {
 
         int skyL = world.getSkyLight(vx, vy, vz);
         int blkL = world.getBlockLight(vx, vy, vz);
+        if (config.isActive() && config.dynamicHandheldLight && AnimaDynamicLightEngine.isActive()) {
+            blkL = Math.max(blkL, AnimaDynamicLightEngine.computeDynamicBlockLight(vx + 0.5, vy + 0.5, vz + 0.5));
+        }
         float[] lightRgb = new float[3];
         AnimaLightmapEngine.computeLight(skyL, blkL, atm, config, timeSeconds, lightRgb);
 

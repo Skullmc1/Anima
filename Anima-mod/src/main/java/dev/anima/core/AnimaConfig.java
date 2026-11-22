@@ -44,6 +44,7 @@ public final class AnimaConfig {
     public boolean waterEnhancement = true;
     public boolean directionalShading = true;
     public boolean foliageEnhancement = true;
+    public boolean dynamicHandheldLight = true;
 
     public float warmthStrength = 1.0f;
     public float shadowDepth = 0.85f;
@@ -76,6 +77,7 @@ public final class AnimaConfig {
                 waterEnhancement = false;
                 directionalShading = false;
                 foliageEnhancement = false;
+                dynamicHandheldLight = false;
                 warmthStrength = 0f;
                 shadowDepth = 0f;
                 fogDensity = 0f;
@@ -92,6 +94,7 @@ public final class AnimaConfig {
                 waterEnhancement = true;
                 directionalShading = false;
                 foliageEnhancement = true;
+                dynamicHandheldLight = true;
                 warmthStrength = 0.82f;
                 shadowDepth = 0.65f;
                 fogDensity = 0.55f;
@@ -108,6 +111,7 @@ public final class AnimaConfig {
                 waterEnhancement = true;
                 directionalShading = true;
                 foliageEnhancement = true;
+                dynamicHandheldLight = true;
                 warmthStrength = 0.92f;
                 shadowDepth = 0.78f;
                 fogDensity = 0.68f;
@@ -124,6 +128,7 @@ public final class AnimaConfig {
                 waterEnhancement = true;
                 directionalShading = true;
                 foliageEnhancement = true;
+                dynamicHandheldLight = true;
                 warmthStrength = 1.05f;
                 shadowDepth = 0.88f;
                 fogDensity = 0.76f;
@@ -160,6 +165,7 @@ public final class AnimaConfig {
             waterEnhancement = Boolean.parseBoolean(props.getProperty("waterEnhancement", String.valueOf(waterEnhancement)));
             directionalShading = Boolean.parseBoolean(props.getProperty("directionalShading", String.valueOf(directionalShading)));
             foliageEnhancement = Boolean.parseBoolean(props.getProperty("foliageEnhancement", String.valueOf(foliageEnhancement)));
+            dynamicHandheldLight = Boolean.parseBoolean(props.getProperty("dynamicHandheldLight", String.valueOf(dynamicHandheldLight)));
         } catch (IOException ignored) {
         }
     }
@@ -174,6 +180,7 @@ public final class AnimaConfig {
         props.setProperty("waterEnhancement", String.valueOf(waterEnhancement));
         props.setProperty("directionalShading", String.valueOf(directionalShading));
         props.setProperty("foliageEnhancement", String.valueOf(foliageEnhancement));
+        props.setProperty("dynamicHandheldLight", String.valueOf(dynamicHandheldLight));
         try {
             if (path.getParent() != null) {
                 Files.createDirectories(path.getParent());

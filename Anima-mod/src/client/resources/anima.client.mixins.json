@@ -7,7 +7,8 @@
 		"AtmosphericFogMixin",
 		"WaterFogMixin",
 		"SkyRendererMixin",
-		"BiomeColorsMixin"
+		"BiomeColorsMixin",
+		"DynamicLightMixin"
 	],
 	"injectors": {
 		"defaultRequire": 1

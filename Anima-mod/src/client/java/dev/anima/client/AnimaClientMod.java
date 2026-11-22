@@ -56,6 +56,7 @@ public class AnimaClientMod implements ClientModInitializer {
             float rain = level.getRainLevel(1.0f);
             currentAtmosphere = new AnimaAtmosphere(dayTime, rain);
         }
+        DynamicLightTracker.tick(client);
 
         while (toggleKey.consumeClick()) {
             AnimaConfig cfg = AnimaMod.config();
