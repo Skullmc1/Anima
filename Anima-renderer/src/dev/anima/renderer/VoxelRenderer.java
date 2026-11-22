@@ -118,6 +118,7 @@ public final class VoxelRenderer {
         float waterHitT = 0f;
         float waterHitX = 0f, waterHitY = 0f, waterHitZ = 0f;
         int waterSkyLight = 15;
+        int waterBlockLight = 0;
 
         for (int step = 0; step < 220; step++) {
             if (t > maxDist) break;
@@ -131,7 +132,9 @@ public final class VoxelRenderer {
                     waterHitX = ox + dx * t;
                     waterHitY = oy + dy * t;
                     waterHitZ = oz + dz * t;
-                    waterSkyLight = world.getSkyLight(vx, Math.min(VoxelWorld.SIZE_Y - 1, vy + 1), vz);
+                    int aboveY = Math.min(VoxelWorld.SIZE_Y - 1, vy + 1);
+                    waterSkyLight = world.getSkyLight(vx, aboveY, vz);
+                    waterBlockLight = Math.max(world.getBlockLight(vx, vy, vz), world.getBlockLight(vx, aboveY, vz));
                 } else if (block.crossModel) {
                     float[] plantRgb = new float[3];
                     float plantT = intersectCrossModel(ox, oy, oz, dx, dy, dz, vx, vy, vz, block, atm, config, plantRgb);
@@ -173,6 +176,7 @@ public final class VoxelRenderer {
                                     waterHitX, waterHitZ,
                                     dx, dy, dz,
                                     waterSkyLight / 15f,
+                                    waterBlockLight / 15f,
                                     timeSeconds,
                                     atm, config,
                                     outRgb);
@@ -219,7 +223,7 @@ public final class VoxelRenderer {
         // Ray missed geometry -> render Sky + 3D Blocky Minecraft Clouds
         if (hitWater) {
             float[] deepBed = {0.06f, 0.16f, 0.24f};
-            AnimaWaterEngine.shadeWaterSurface(deepBed, 6.0f, waterHitX, waterHitZ, dx, dy, dz, waterSkyLight / 15f, timeSeconds, atm, config, outRgb);
+            AnimaWaterEngine.shadeWaterSurface(deepBed, 6.0f, waterHitX, waterHitZ, dx, dy, dz, waterSkyLight / 15f, waterBlockLight / 15f, timeSeconds, atm, config, outRgb);
             applyFog(waterHitX, waterHitY, waterHitZ, waterHitT, dx, dy, dz, atm, config, outRgb);
             return;
         }
@@ -457,7 +461,8 @@ public final class VoxelRenderer {
             AnimaConfig config,
             float[] rgb) {
 
-        float fogFactor = AnimaFogEngine.computeFogFactor(dist, hy, VoxelWorld.WATER_LEVEL, 76f, atm, config);
+        float renderDist = config.isActive() ? 78f : 110f;
+        float fogFactor = AnimaFogEngine.computeFogFactor(dist, hy, VoxelWorld.WATER_LEVEL, renderDist, atm, config);
         if (fogFactor <= 0.001f) return;
 
         float[] fogCol = new float[3];
@@ -466,7 +471,8 @@ public final class VoxelRenderer {
     }
 
     /**
-     * Renders crisp blocky Minecraft clouds at altitude Y=38 with Anima's sunlit-top / cool-bottom shading.
+     * Renders true 3D blocky Minecraft clouds (slab from Y=37..40) with sunlit side/top faces
+     * and cool shaded undersides for volumetric-style depth without volumetric shaders.
      */
     private void blendClouds(
             float ox, float oy, float oz,
@@ -475,32 +481,58 @@ public final class VoxelRenderer {
             AnimaConfig config,
             float[] skyRgb) {
 
-        if (dy <= 0.03f) return;
-        float cloudY = 39f;
-        float t = (cloudY - oy) / dy;
-        if (t <= 0f || t > 260f) return;
+        if (dy <= 0.025f) return;
+        float cloudBottom = 37f;
+        float cloudTop = 40.2f;
+        float tEnter = (cloudBottom - oy) / dy;
+        float tExit = (cloudTop - oy) / dy;
+        if (tEnter <= 0f || tEnter > 240f) return;
 
-        float cx = ox + dx * t;
-        float cz = oz + dz * t;
+        float cellSize = 8.5f;
+        float cx = ox + dx * tEnter;
+        float cz = oz + dz * tEnter;
+        int cellX = (int) Math.floor(cx / cellSize);
+        int cellZ = (int) Math.floor(cz / cellSize);
 
-        // Blocky 8x8 Minecraft cloud cells
-        int cellX = (int) Math.floor(cx / 9.0f);
-        int cellZ = (int) Math.floor(cz / 9.0f);
-        float cNoise = cloudNoise(cellX, cellZ);
-        if (cNoise < 0.56f) return;
+        boolean hitBottom = cloudNoise(cellX, cellZ) >= 0.56f;
+        boolean hitSide = false;
+        float hitT = tEnter;
+
+        if (!hitBottom) {
+            // Check 3 samples along the slab for 3D vertical cloud side faces
+            for (int s = 1; s <= 4; s++) {
+                float ts = tEnter + (tExit - tEnter) * (s / 4f);
+                int sx = (int) Math.floor((ox + dx * ts) / cellSize);
+                int sz = (int) Math.floor((oz + dz * ts) / cellSize);
+                if (cloudNoise(sx, sz) >= 0.56f) {
+                    hitSide = true;
+                    hitT = ts;
+                    cellX = sx;
+                    cellZ = sz;
+                    break;
+                }
+            }
+        }
+
+        if (!hitBottom && !hitSide) return;
 
         float[] topCol = new float[3];
         float[] botCol = new float[3];
         AnimaSkyEngine.computeCloudColors(atm, config, topCol, botCol);
 
-        // Slight edge & height variation for puffy 3D look
-        float puff = ColorMath.smoothstep(0.56f, 0.85f, cNoise);
         float[] cloudCol = new float[3];
-        ColorMath.lerpRgb(botCol, topCol, 0.35f + 0.65f * puff, cloudCol);
+        if (hitSide) {
+            // Bright sunlit vertical side face of 3D cloud
+            float sunSide = 0.55f + 0.45f * ColorMath.clamp01(dx * atm.sunDirX + dz * atm.sunDirZ + 0.4f);
+            ColorMath.lerpRgb(botCol, topCol, sunSide, cloudCol);
+        } else {
+            // Shaded cloud underside with subtle warm rim near the sun
+            float sunRim = (float) Math.pow(Math.max(0f, dx * atm.sunDirX + dy * atm.sunDirY + dz * atm.sunDirZ), 3.0) * 0.45f;
+            ColorMath.lerpRgb(botCol, topCol, 0.22f + sunRim, cloudCol);
+        }
 
-        // Fade clouds smoothly near the distant horizon
-        float horizonFade = ColorMath.smoothstep(0.03f, 0.20f, dy) * (1f - ColorMath.smoothstep(140f, 250f, t));
-        float alpha = 0.86f * horizonFade;
+        float horizonFade = ColorMath.smoothstep(0.025f, 0.18f, dy) * (1f - ColorMath.smoothstep(145f, 235f, hitT));
+        float alpha = 0.90f * horizonFade;
         ColorMath.lerpRgb(skyRgb, cloudCol, alpha, skyRgb);
     }
 

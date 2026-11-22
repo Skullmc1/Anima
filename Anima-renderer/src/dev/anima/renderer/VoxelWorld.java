@@ -149,43 +149,43 @@ public final class VoxelWorld {
     }
 
     private void placeHeroFeatures() {
-        // 1. Hero Oak Tree on the right grassy knoll overlooking the pond
-        int heroX = 57;
-        int heroZ = 44;
+        // 1. Hero Oak Tree on the midground-right grassy knoll overlooking the pond (prominent canopy & shadow)
+        int heroX = 53;
+        int heroZ = 37;
         int heroY = surfaceY(heroX, heroZ);
         if (getBlock(heroX, heroY, heroZ) == BlockType.GRASS || getBlock(heroX, heroY, heroZ) == BlockType.SAND) {
             setBlock(heroX, heroY, heroZ, BlockType.DIRT);
-            placeOakTree(heroX, heroY + 1, heroZ, 5);
+            placeOakTree(heroX, heroY + 1, heroZ, 6);
         }
 
-        // 2. Second lush Oak Tree on the left bank slightly further back
-        placeTreeOnGrass(34, 52, 6);
+        // 2. Second lush Oak Tree across the pond on the left bank
+        placeTreeOnGrass(38, 50, 6);
         // 3. Distant trees on the hills for depth & silhouette
-        placeTreeOnGrass(66, 61, 5);
-        placeTreeOnGrass(26, 64, 6);
-        placeTreeOnGrass(50, 68, 5);
-        placeTreeOnGrass(72, 47, 5);
+        placeTreeOnGrass(62, 56, 5);
+        placeTreeOnGrass(28, 60, 6);
+        placeTreeOnGrass(49, 64, 5);
+        placeTreeOnGrass(70, 46, 5);
 
         // 4. Small cozy wooden pier jutting into the pond + glowing torch post!
-        int pierZ = 41;
-        for (int px = 50; px <= 54; px++) {
+        int pierZ = 40;
+        for (int px = 48; px <= 52; px++) {
             for (int pz = pierZ; pz <= pierZ + 1; pz++) {
                 setBlock(px, WATER_LEVEL + 1, pz, BlockType.OAK_PLANKS);
             }
         }
         // Support posts down into the riverbed
         for (int y = 10; y <= WATER_LEVEL; y++) {
-            if (getBlock(50, y, pierZ) == BlockType.WATER) setBlock(50, y, pierZ, BlockType.OAK_LOG);
-            if (getBlock(50, y, pierZ + 1) == BlockType.WATER) setBlock(50, y, pierZ + 1, BlockType.OAK_LOG);
+            if (getBlock(48, y, pierZ) == BlockType.WATER) setBlock(48, y, pierZ, BlockType.OAK_LOG);
+            if (getBlock(48, y, pierZ + 1) == BlockType.WATER) setBlock(48, y, pierZ + 1, BlockType.OAK_LOG);
         }
         // Torch post on the pier corner so warm block light dances on water, planks, and grass!
-        setBlock(50, WATER_LEVEL + 2, pierZ, BlockType.OAK_LOG);
-        setBlock(50, WATER_LEVEL + 3, pierZ, BlockType.TORCH);
+        setBlock(48, WATER_LEVEL + 2, pierZ, BlockType.OAK_LOG);
+        setBlock(48, WATER_LEVEL + 3, pierZ, BlockType.TORCH);
 
-        // Second warm torch near the base of the hero oak tree
-        int tx = 54, tz = 45;
+        // Second warm torch on a cobblestone pedestal near the hero oak tree
+        int tx = 51, tz = 38;
         int ty = surfaceY(tx, tz);
-        if (getBlock(tx, ty, tz) == BlockType.GRASS) {
+        if (getBlock(tx, ty, tz) == BlockType.GRASS || getBlock(tx, ty, tz) == BlockType.SAND) {
             setBlock(tx, ty + 1, tz, BlockType.COBBLESTONE);
             setBlock(tx, ty + 2, tz, BlockType.TORCH);
         }

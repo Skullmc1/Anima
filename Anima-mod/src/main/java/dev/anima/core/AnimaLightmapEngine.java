@@ -9,16 +9,6 @@ public final class AnimaLightmapEngine {
 
     private AnimaLightmapEngine() {}
 
-    /**
-     * Computes the final RGB lighting multiplier for a given (skyLight, blockLight) pair.
-     *
-     * @param skyLight    0..15 Minecraft sky light level
-     * @param blockLight  0..15 Minecraft block light level (torches, lanterns, lava)
-     * @param atmosphere  Current time-of-day atmospheric state
-     * @param config      Active Anima configuration
-     * @param timeSeconds Elapsed time in seconds (for subtle torch warmth flicker)
-     * @param outRgb      Output float[3] RGB multiplier in 0..1+
-     */
     public static void computeLight(
             int skyLight,
             int blockLight,
@@ -36,8 +26,9 @@ public final class AnimaLightmapEngine {
         }
 
         // Non-linear perceptual response curve: deeper crevices, crisper sunlit areas
-        float skyCurve = (float) Math.pow(sky, 1.0f + 0.45f * config.shadowDepth);
-        float blockCurve = (float) Math.pow(block, 1.35f);
+        float skyCurve = (float) Math.pow(sky, 1.0f + 0.42f * config.shadowDepth);
+        // Slightly broader block-light falloff so torches cast a warm cozy pool
+        float blockCurve = (float) Math.pow(block, 1.12f);
 
         // Subtle organic torch flicker
         float flicker = 1.0f;
@@ -48,9 +39,8 @@ public final class AnimaLightmapEngine {
 
         // Sky contribution blends between cool shadow tint (low skyLight) and warm sunlight (high skyLight)
         float sunMix = ColorMath.smoothstep(0.25f, 0.95f, sky);
-        float skyStrength = ColorMath.lerp(0.22f, 1.08f, atmosphere.dayFactor);
-        // Preserve readable moonlit night
-        skyStrength = Math.max(skyStrength, 0.24f * atmosphere.nightFactor);
+        float skyStrength = ColorMath.lerp(0.30f, 1.04f, atmosphere.dayFactor);
+        skyStrength = Math.max(skyStrength, 0.32f * atmosphere.nightFactor);
 
         float sr = ColorMath.lerp(atmosphere.shadowTintColor[0], atmosphere.sunColor[0], sunMix * 0.72f * config.warmthStrength);
         float sg = ColorMath.lerp(atmosphere.shadowTintColor[1], atmosphere.sunColor[1], sunMix * 0.72f * config.warmthStrength);
@@ -61,31 +51,28 @@ public final class AnimaLightmapEngine {
         float skyB = sb * skyCurve * skyStrength;
 
         // Ambient bounce floor so caves and deep shade keep subtle cool-indigo readability
-        float ambientFloor = ColorMath.lerp(0.055f, 0.095f, atmosphere.dayFactor) * (1.0f - 0.25f * config.shadowDepth);
+        float ambientFloor = ColorMath.lerp(0.08f, 0.10f, atmosphere.dayFactor) * (1.0f - 0.22f * config.shadowDepth);
         skyR += atmosphere.shadowTintColor[0] * ambientFloor;
         skyG += atmosphere.shadowTintColor[1] * ambientFloor;
         skyB += atmosphere.shadowTintColor[2] * ambientFloor;
 
-        // Warm incandescent block light (torch/lantern) with glowing hot core at blockLight 13..15
-        float hotCore = ColorMath.smoothstep(0.75f, 1.0f, block) * 0.28f;
-        float blockIntensity = blockCurve * 1.18f * flicker;
+        // Warm incandescent block light (torch/lantern) boosted at dusk/night for cozy atmosphere
+        float nightBoost = 1.0f + 0.55f * atmosphere.nightFactor + 0.25f * atmosphere.goldenHourFactor;
+        float hotCore = ColorMath.smoothstep(0.68f, 1.0f, block) * 0.38f;
+        float blockIntensity = blockCurve * 1.15f * nightBoost * flicker;
         float blkR = (atmosphere.torchColor[0] + hotCore) * blockIntensity;
-        float blkG = (atmosphere.torchColor[1] + hotCore * 0.85f) * blockIntensity;
-        float blkB = (atmosphere.torchColor[2] + hotCore * 0.65f) * blockIntensity;
+        float blkG = (atmosphere.torchColor[1] + hotCore * 0.78f) * blockIntensity;
+        float blkB = (atmosphere.torchColor[2] + hotCore * 0.50f) * blockIntensity;
 
-        // Screen-like additive blend prevents harsh clipping when torch meets sunlight
+        // Soft screen-additive blend preserves warm torchlight even in twilight
         outRgb[0] = 1f - (1f - ColorMath.clamp01(skyR)) * (1f - ColorMath.clamp01(blkR));
         outRgb[1] = 1f - (1f - ColorMath.clamp01(skyG)) * (1f - ColorMath.clamp01(blkG));
         outRgb[2] = 1f - (1f - ColorMath.clamp01(skyB)) * (1f - ColorMath.clamp01(blkB));
 
-        // Gentle filmic tone polish
-        ColorMath.applyFilmicPolish(outRgb, config.filmicStrength * 0.45f);
-        ColorMath.adjustSaturation(outRgb, 1.0f + (config.saturationBoost - 1.0f) * 0.55f);
+        ColorMath.applyFilmicPolish(outRgb, config.filmicStrength * 0.42f);
+        ColorMath.adjustSaturation(outRgb, 1.0f + (config.saturationBoost - 1.0f) * 0.50f);
     }
 
-    /**
-     * Faithful approximation of vanilla Minecraft's flat, slightly washed-out lightmap.
-     */
     public static void computeVanillaLight(float sky, float block, AnimaAtmosphere atmosphere, float[] outRgb) {
         float skyBright = ColorMath.lerp(0.18f, 1.0f, atmosphere.dayFactor);
         float s = (float) Math.pow(sky, 1.08f) * skyBright;
@@ -95,15 +82,11 @@ public final class AnimaLightmapEngine {
         float g = Math.max(s, b * 0.86f);
         float bl = Math.max(s * ColorMath.lerp(1.06f, 1.0f, atmosphere.dayFactor), b * 0.68f);
 
-        // Vanilla minimum ambient brightness
         outRgb[0] = ColorMath.clamp01(r * 0.92f + 0.08f);
         outRgb[1] = ColorMath.clamp01(g * 0.92f + 0.08f);
         outRgb[2] = ColorMath.clamp01(bl * 0.92f + 0.08f);
     }
 
-    /**
-     * Fills an entire 16x16 ARGB lightmap buffer (row-major: blockLight + skyLight * 16).
-     */
     public static void fillLightmapTable(int[] argb256, AnimaAtmosphere atmosphere, AnimaConfig config, float timeSeconds) {
         float[] tmp = new float[3];
         for (int sky = 0; sky < 16; sky++) {

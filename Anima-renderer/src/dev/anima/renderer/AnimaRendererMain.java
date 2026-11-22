@@ -32,14 +32,14 @@ public final class AnimaRendererMain {
         System.out.printf("[Anima-renderer] World & lighting built in %d ms%n", System.currentTimeMillis() - t0);
 
         // Classic Minecraft first-person gameplay camera overlooking the grassy bank, pond, pier+torch, and hero oak tree
-        float camX = 36.5f, camY = 22.8f, camZ = 25.5f;
-        float lookX = 51.0f, lookY = 18.8f, lookZ = 45.0f;
+        float camX = 35.5f, camY = 22.4f, camZ = 24.5f;
+        float lookX = 48.5f, lookY = 19.6f, lookZ = 44.0f;
         float fov = 68f;
 
         record Scenario(String id, String label, float dayTicks, float rain) {}
         Scenario[] scenarios = {
-                new Scenario("day", "Midday (6000 ticks)", 5200f, 0f),
-                new Scenario("golden", "Golden Hour (11450 ticks)", 11450f, 0f),
+                new Scenario("day", "Midday (5200 ticks)", 5200f, 0f),
+                new Scenario("golden", "Golden Hour (11350 ticks)", 11350f, 0f),
                 new Scenario("night", "Moonlit Night (18000 ticks)", 18000f, 0f)
         };
 
@@ -93,6 +93,38 @@ public final class AnimaRendererMain {
         Path sheetPath = outDir.resolve("comparison_sheet.png");
         ImageIO.write(sheet, "png", sheetPath.toFile());
         System.out.println("[Anima-renderer] Saved comparison sheet -> " + sheetPath.toAbsolutePath());
+
+        // Render 4-preset comparison at Golden Hour (Vanilla vs Potato vs Balanced vs Lush)
+        AnimaAtmosphere goldenAtm = new AnimaAtmosphere(11350f, 0f);
+        AnimaConfig.Preset[] presets = AnimaConfig.Preset.values();
+        int pw = 640, ph = 360;
+        BufferedImage presetSheet = new BufferedImage(pw * 2 + pad * 3, ph * 2 + pad * 3 + headerH, BufferedImage.TYPE_INT_RGB);
+        Graphics2D pg = presetSheet.createGraphics();
+        pg.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+        pg.setColor(new Color(18, 20, 26));
+        pg.fillRect(0, 0, presetSheet.getWidth(), presetSheet.getHeight());
+        pg.setFont(new Font("SansSerif", Font.BOLD, 18));
+        pg.setColor(new Color(235, 240, 248));
+        pg.drawString("ANIMA MOD — Quality Presets Comparison (Golden Hour, Zero GPU Shaders)", pad + 6, 30);
+
+        for (int i = 0; i < presets.length; i++) {
+            AnimaConfig pCfg = AnimaConfig.forPreset(presets[i]);
+            long ps0 = System.currentTimeMillis();
+            BufferedImage pImg = renderer.render(pw, ph, camX, camY, camZ, lookX, lookY, lookZ, fov, goldenAtm, pCfg, 2.5f);
+            long pMs = System.currentTimeMillis() - ps0;
+            int col = i % 2;
+            int row = i / 2;
+            int px = pad + col * (pw + pad);
+            int py = headerH + pad + row * (ph + pad);
+            pg.drawImage(pImg, px, py, null);
+            Color badgeBg = (presets[i] == AnimaConfig.Preset.VANILLA) ? new Color(25, 28, 35, 195) : new Color(18, 48, 62, 210);
+            Color badgeFg = (presets[i] == AnimaConfig.Preset.VANILLA) ? Color.WHITE : new Color(165, 240, 255);
+            drawBadge(pg, px + 12, py + 12, presets[i].displayName() + " (" + pMs + " ms)", badgeBg, badgeFg);
+        }
+        pg.dispose();
+        Path presetPath = outDir.resolve("presets_sheet.png");
+        ImageIO.write(presetSheet, "png", presetPath.toFile());
+        System.out.println("[Anima-renderer] Saved presets sheet -> " + presetPath.toAbsolutePath());
     }
 
     private static void drawBadge(Graphics2D g, int x, int y, String text, Color bg, Color fg) {
