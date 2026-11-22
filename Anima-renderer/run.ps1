@@ -14,5 +14,5 @@ Write-Host "[Anima-renderer] Compiling renderer..."
 javac --release 25 -cp $modClasses -d out src\dev\anima\renderer\*.java
 
 Write-Host "[Anima-renderer] Running renderer..."
-java -cp "out;$modClasses" dev.anima.renderer.AnimaRendererMain
+java -cp "out;$modClasses" dev.anima.renderer.AnimaRendererMain @args
 Pop-Location

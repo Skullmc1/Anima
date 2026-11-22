@@ -167,6 +167,80 @@ public final class AnimaRendererMain {
         Path sunPath = outDir.resolve("sun_showcase.png");
         ImageIO.write(sunSheet, "png", sunPath.toFile());
         System.out.println("[Anima-renderer] Saved sun showcase -> " + sunPath.toAbsolutePath());
+
+        // Optional 3-way Shader Pack Benchmark: Vanilla vs Anima v0.6.0 vs Iris/OptiFine Shader Pack (.zip)
+        Path shaderZip = null;
+        String shaderName = null;
+        for (String arg : args) {
+            if (arg.startsWith("--shaderpack=")) {
+                shaderZip = Path.of(arg.substring("--shaderpack=".length()));
+            } else if (arg.startsWith("--shadername=")) {
+                shaderName = arg.substring("--shadername=".length());
+            }
+        }
+        if (shaderZip == null) {
+            Path spDir = Path.of("shaderpacks");
+            if (Files.isDirectory(spDir)) {
+                try (var stream = Files.list(spDir)) {
+                    shaderZip = stream.filter(p -> p.toString().toLowerCase().endsWith(".zip")).findFirst().orElse(null);
+                }
+            }
+        }
+
+        if (shaderZip != null && Files.exists(shaderZip)) {
+            ShaderPackProfile pack = ShaderPackProfile.loadFromZip(shaderZip, shaderName);
+            System.out.println("[Anima-renderer] Loaded Shader Pack: " + pack);
+            ShaderPackRenderer spRenderer = new ShaderPackRenderer(world, atlas);
+
+            int cw = 720, ch = 405;
+            BufferedImage cmp = new BufferedImage(cw * 3 + pad * 4, ch * scenarios.length + pad * (scenarios.length + 1) + headerH, BufferedImage.TYPE_INT_RGB);
+            Graphics2D cg = cmp.createGraphics();
+            cg.setRenderingHint(RenderingHints.KEY_TEXT_ANTIALIASING, RenderingHints.VALUE_TEXT_ANTIALIAS_ON);
+            cg.setColor(new Color(18, 20, 26));
+            cg.fillRect(0, 0, cmp.getWidth(), cmp.getHeight());
+            cg.setFont(new Font("SansSerif", Font.BOLD, 20));
+            cg.setColor(new Color(235, 240, 248));
+            cg.drawString("3-WAY BENCHMARK: Vanilla 26.2  vs  Anima v0.6.0 (Zero-Shader Mod)  vs  " + pack.name + " (" + pack.glslFileCount + " GLSL files)", pad + 6, 30);
+
+            for (int i = 0; i < scenarios.length; i++) {
+                Scenario s = scenarios[i];
+                AnimaAtmosphere atm = new AnimaAtmosphere(s.dayTicks, s.rain);
+                int rowY = headerH + pad + i * (ch + pad);
+
+                // Col 1: Vanilla
+                AnimaDynamicLightEngine.clear();
+                long tv0 = System.currentTimeMillis();
+                BufferedImage imgV = renderer.render(cw, ch, camX, camY, camZ, lookX, lookY, lookZ, fov, atm, vanillaCfg, 2.5f);
+                long tvMs = System.currentTimeMillis() - tv0;
+
+                // Col 2: Anima v0.6.0
+                if (s.holdingTorch) AnimaDynamicLightEngine.updateSource(camX + 1.8, camY - 1.1, camZ + 2.8, 14);
+                else AnimaDynamicLightEngine.clear();
+                long ta0 = System.currentTimeMillis();
+                BufferedImage imgA = renderer.render(cw, ch, camX, camY, camZ, lookX, lookY, lookZ, fov, atm, animaCfg, 2.5f);
+                long taMs = System.currentTimeMillis() - ta0;
+
+                // Col 3: Shader Pack (Deferred Shadows + Water SSR Reflections + Bloom + Tonemap)
+                long ts0 = System.currentTimeMillis();
+                BufferedImage imgS = spRenderer.render(cw, ch, camX, camY, camZ, lookX, lookY, lookZ, fov, atm, pack, 2.5f);
+                long tsMs = System.currentTimeMillis() - ts0;
+                AnimaDynamicLightEngine.clear();
+
+                cg.drawImage(imgV, pad, rowY, null);
+                cg.drawImage(imgA, pad * 2 + cw, rowY, null);
+                cg.drawImage(imgS, pad * 3 + cw * 2, rowY, null);
+
+                drawBadge(cg, pad + 10, rowY + 10, "VANILLA — " + s.id.toUpperCase() + " (" + tvMs + "ms)", new Color(25, 28, 35, 195), Color.WHITE);
+                drawBadge(cg, pad * 2 + cw + 10, rowY + 10, "ANIMA v0.6.0 — " + s.id.toUpperCase() + " (" + taMs + "ms)", new Color(18, 48, 62, 210), new Color(165, 240, 255));
+                drawBadge(cg, pad * 3 + cw * 2 + 10, rowY + 10, pack.name + " (" + tsMs + "ms)", new Color(58, 28, 18, 210), new Color(255, 215, 155));
+
+                System.out.printf("[Anima-renderer] 3-Way %-7s | Vanilla: %3d ms | Anima: %3d ms | %s: %3d ms%n", s.id, tvMs, taMs, pack.name, tsMs);
+            }
+            cg.dispose();
+            Path cmpPath = outDir.resolve("shader_comparison.png");
+            ImageIO.write(cmp, "png", cmpPath.toFile());
+            System.out.println("[Anima-renderer] Saved 3-way shader comparison -> " + cmpPath.toAbsolutePath());
+        }
     }
 
     private static void drawBadge(Graphics2D g, int x, int y, String text, Color bg, Color fg) {
