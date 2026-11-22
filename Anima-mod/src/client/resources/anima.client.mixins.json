@@ -5,6 +5,7 @@
 	"client": [
 		"LightmapExtractorMixin",
 		"AtmosphericFogMixin",
+		"FogRendererMixin",
 		"WaterFogMixin",
 		"SkyRendererMixin",
 		"BiomeColorsMixin",

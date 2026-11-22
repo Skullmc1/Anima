@@ -88,13 +88,14 @@ void main() {
         discard;
     }
 #else
-    // Translucent water enhancement in Sodium (only triggers on translucent water surfaces!)
+    // Seamless translucent water enhancement in Sodium (exact 16-block harmonic ripple frequencies!)
     if (v_AnimaWater > 0.5 && color.a < 0.98 && color.a > 0.12) {
+        const float H = 0.3926990817;
         float t = v_WaterTime;
         vec2 wp = v_WaterPhaseCoord;
-        float r1 = sin(wp.x * 3.2 + wp.y * 2.1 + t * 3.1) * cos(wp.x * 2.0 - wp.y * 3.5 + t * 2.4);
-        float r2 = sin(wp.x * 5.8 - wp.y * 5.1 - t * 3.8);
-        float r3 = cos(wp.x * 9.0 + wp.y * 7.5 + t * 4.6) * 0.35;
+        float r1 = sin(wp.x * (8.0 * H) + wp.y * (5.0 * H) + t * 3.1) * cos(wp.x * (5.0 * H) - wp.y * (9.0 * H) + t * 2.4);
+        float r2 = sin(wp.x * (15.0 * H) - wp.y * (13.0 * H) - t * 3.8);
+        float r3 = cos(wp.x * (22.0 * H) + wp.y * (19.0 * H) + t * 4.6) * 0.35;
         float ripple = r1 * 0.55 + r2 * 0.30 + r3 * 0.15;
 
         vec3 viewDir = normalize(v_WaterRelPos);

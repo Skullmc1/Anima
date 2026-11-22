@@ -32,10 +32,9 @@ uniform int u_CurrentTime;
 uniform uint u_RegionID;
 #endif
 
-uniform sampler2D u_LightTex; // The light map texture sampler
+uniform sampler2D u_LightTex;
 
 uvec3 _get_relative_chunk_coord(uint pos) {
-    // Packing scheme is defined by LocalSectionIndex
     return uvec3(pos) >> uvec3(5u, 0u, 2u) & uvec3(7u, 3u, 7u);
 }
 
@@ -46,29 +45,30 @@ vec3 _get_draw_translation(uint pos) {
 void main() {
     _vert_init();
 
-    // Transform the chunk-local vertex position into camera-relative world space
     vec3 drawTrans = _get_draw_translation(_draw_id);
     vec3 translation = u_RegionOffset + drawTrans;
     vec3 position = _vert_position + translation;
 
-    // Real-time seconds from Sodium's u_CurrentTime (milliseconds)
     float animaTime = float(u_CurrentTime & 1048575) * 0.001;
 
-    // 1. Animated Wavy Water in Sodium (only when Anima is ON: fract(u_EnvironmentFog.y) > 0.25)
+    // 1. Seamless Animated Wavy Water in Sodium
+    // Exact 16-block harmonic base frequency (2*PI / 16.0) guarantees ZERO seams across chunk & region borders!
+    const float H = 0.3926990817;
     float animaWaterOn = (fract(u_EnvironmentFog.y) > 0.25) ? 1.0 : 0.0;
     float fy = fract(_vert_position.y);
-    // Water top surfaces have fractional height (still water = 8/9 = 0.8888) and cool blue/teal biome tint
-    float isWaterCandidate = (animaWaterOn > 0.5 && fy > 0.06 && fy < 0.97 && _vert_color.b > _vert_color.r * 1.12) ? 1.0 : 0.0;
+    // Only displace top air-exposed water surfaces (still water = 8/9 = 0.8888), smoothly tapered for flowing slopes
+    float isWaterCandidate = (animaWaterOn > 0.5 && fy > 0.12 && fy < 0.96 && _vert_color.b > _vert_color.r * 1.12) ? 1.0 : 0.0;
     float wave = 0.0;
 
-    // Region-local continuous coordinate (seamless across all chunks in region, independent of camera motion!)
-    vec2 waterCoord = (_vert_position.xz + drawTrans.xz);
+    vec2 waterCoord = _vert_position.xz + drawTrans.xz;
 
     if (isWaterCandidate > 0.5) {
-        float w1 = sin(waterCoord.x * 1.15 + waterCoord.y * 0.78 + animaTime * 2.6) * 0.048;
-        float w2 = cos(waterCoord.x * 0.72 - waterCoord.y * 1.42 + animaTime * 2.0) * 0.032;
-        float w3 = sin((waterCoord.x + waterCoord.y) * 2.25 - animaTime * 3.4) * 0.015;
-        wave = w1 + w2 + w3;
+        // Taper wave height on steep flowing edges (fy < 0.75) so flowing water never tears
+        float surfaceMask = smoothstep(0.65, 0.86, fy);
+        float w1 = sin(waterCoord.x * (3.0 * H) + waterCoord.y * (2.0 * H) + animaTime * 2.5) * 0.044;
+        float w2 = cos(waterCoord.x * (2.0 * H) - waterCoord.y * (4.0 * H) + animaTime * 1.9) * 0.028;
+        float w3 = sin((waterCoord.x + waterCoord.y) * (5.0 * H) - animaTime * 3.2) * 0.012;
+        wave = (w1 + w2 + w3) * surfaceMask;
         position.y += wave;
     }
 
@@ -81,11 +81,9 @@ void main() {
     fadeFactor = (chunkFade < 0) ? 1.0 : fade;
 #endif
 
-    // Transform the vertex position into model-view-projection space
     gl_Position = u_ProjectionMatrix * u_ModelViewMatrix * vec4(position, 1.0);
 
-    // 2. Zero-Lag Per-Frame GPU Dynamic Handheld Lighting in Sodium (ZERO chunk rebuilds, full FPS!)
-    // Smooth wall-clock faded luminance (0..15) is encoded in fract(u_RenderFog.y).
+    // 2. Zero-Lag Per-Frame GPU Dynamic Handheld Lighting (encoded in fract(u_RenderFog.y) by FogRendererMixin!)
     vec2 lightCoord = _vert_tex_light_coord;
     float heldLum = clamp(fract(u_RenderFog.y) * (16.0 / 0.96), 0.0, 15.0);
     if (heldLum > 0.05) {
@@ -95,7 +93,6 @@ void main() {
         lightCoord.x = max(lightCoord.x, dynCoord);
     }
 
-    // Add the light color to the vertex color, and pass the texture coordinates to the fragment shader
     v_Color = _vert_color * texture(u_LightTex, lightCoord);
     v_TexCoord = (_vert_tex_diffuse_coord_bias * u_TexCoordShrink) + _vert_tex_diffuse_coord;
     v_AnimaWater = isWaterCandidate;

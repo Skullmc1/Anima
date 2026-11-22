@@ -36,13 +36,15 @@ void main() {
     }
 
     if (isWater > 0.5) {
+        const float H = 0.3926990817;
         float t = GameTime * 3600.0;
-        float w1 = sin(worldPos.x * 1.15 + worldPos.z * 0.78 + t * 2.4) * 0.048;
-        float w2 = cos(worldPos.x * 0.72 - worldPos.z * 1.42 + t * 1.85) * 0.032;
-        float w3 = sin((worldPos.x + worldPos.z) * 2.25 - t * 3.2) * 0.015;
-        wave = w1 + w2 + w3;
-        float topMask = smoothstep(0.05, 0.25, fract(Position.y));
-        pos.y += wave * topMask;
+        float fy = fract(Position.y);
+        float surfaceMask = smoothstep(0.65, 0.86, fy);
+        float w1 = sin(worldPos.x * (3.0 * H) + worldPos.z * (2.0 * H) + t * 2.5) * 0.044;
+        float w2 = cos(worldPos.x * (2.0 * H) - worldPos.z * (4.0 * H) + t * 1.9) * 0.028;
+        float w3 = sin((worldPos.x + worldPos.z) * (5.0 * H) - t * 3.2) * 0.012;
+        wave = (w1 + w2 + w3) * surfaceMask;
+        pos.y += wave;
     }
 
     // Zero-lag per-frame GPU dynamic handheld lighting (encoded in fract(FogRenderDistanceEnd))
