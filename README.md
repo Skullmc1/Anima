@@ -28,6 +28,9 @@ Switch modes anytime from the **Escape Menu** via Anima's custom dark glassmorph
 ### Borderlands Mode (Vanilla 26.2 vs Anima Borderlands vs Miasma R1.0.2)
 ![Borderlands Showcase](Anima-renderer/renders/borderlands_showcase.png)
 
+### Borderlands Custom HUD (In-Game — Responsive Bottom-Left Status, Stylized Hotbar & Bottom-Right Chat)
+![Borderlands Custom HUD](docs/borderlands_hud.jpg)
+
 ### Sketch Modes (Vanilla 26.2 vs Color Pencil vs Blueprint)
 ![Color Pencil and Blueprint Showcase](Anima-renderer/renders/sketch_showcase.png)
 
